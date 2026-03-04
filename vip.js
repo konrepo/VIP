@@ -226,6 +226,13 @@ builder.defineCatalogHandler(async ({ extra }) => {
 
 builder.defineMetaHandler(async ({ id }) => {
   try {
+    // Get series page to extract OG image
+    const seriesUrl = `${BASE_URL}/?p=${id}`;
+    const { data } = await axiosClient.get(seriesUrl);
+    const $ = cheerio.load(data);
+
+    const ogImage = $('meta[property="og:image"]').attr("content") || "";
+
     const episodes = await getEpisodes(id);
     if (!episodes.length) return { meta: null };
 
@@ -236,7 +243,8 @@ builder.defineMetaHandler(async ({ id }) => {
         id: id,
         type: "series",
         name: first.title,
-        poster: normalizePoster(first.thumbnail),
+        poster: first.thumbnail,
+        background: normalizePoster(ogImage),
         videos: episodes,
       },
     };
