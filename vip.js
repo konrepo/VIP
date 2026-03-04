@@ -155,7 +155,7 @@ async function getItems(url) {
       const postId = await getPostId(link);
       if (postId) {
         results.push({
-          id: postId,
+          id: link,
           name: title,
           poster: normalizePoster(poster),
         });
