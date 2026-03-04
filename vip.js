@@ -1,41 +1,13 @@
-// =========================
-// IMPORTS
-// =========================
 const { addonBuilder, serveHTTP } = require("stremio-addon-sdk");
 const cheerio = require("cheerio");
 const axios = require("axios");
 
-// =========================
-// CONSTANTS
-// =========================
 const BASE_URL = "https://phumikhmer.vip";
 
 const BLOG_IDS = {
   TVSABAY: "8016412028548971199",
   ONELEGEND: "596013908374331296",
 };
-
-// =========================
-// MANIFEST
-// =========================
-const manifest = {
-  id: "community.khmer.vip",
-  version: "1.0.0",
-  name: "Khmer VIP",
-  description: "Khmer VIP Blogger Streams",
-  resources: ["catalog", "meta", "stream"],
-  types: ["series"],
-  catalogs: [
-    {
-      type: "series",
-      id: "vip",
-      name: "VIP Latest",
-      extraSupported: ["search", "skip"],
-    },
-  ],
-};
-
-const builder = new addonBuilder(manifest);
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36";
@@ -79,37 +51,17 @@ async function fetchFromBlog(blogId, postId) {
     const { data } = await axiosClient.get(feedUrl);
 
     const title = data.entry.title.$t;
+    const thumbnail = data.entry.media$thumbnail?.url || "";
     const year =
       parseInt(data.entry.published.$t.slice(0, 4)) ||
       new Date().getFullYear();
 
-    const content = data.entry.content?.$t || "";
-
-    // Extract large image from content
-    let thumbnail = "";
-    const imgMatch = content.match(/https?:\/\/blogger\.googleusercontent\.com[^"']+/);
-
-    if (imgMatch) {
-      thumbnail = imgMatch[0];
-    }
-
-    // fallback to blogger thumbnail if needed
-    if (!thumbnail) {
-      thumbnail = data.entry.media$thumbnail?.url || "";
-    }
-
-    const urls = extractVideoLinks(content);
+    const urls = extractVideoLinks(data.entry.content.$t);
 
     if (!urls.length) return null;
 
-    return {
-      title,
-      thumbnail: normalizePoster(thumbnail),
-      year,
-      urls
-    };
-
-  } catch (err) {
+    return { title, thumbnail, year, urls };
+  } catch {
     return null;
   }
 }
@@ -155,7 +107,7 @@ async function getItems(url) {
       const postId = await getPostId(link);
       if (postId) {
         results.push({
-          id: link,
+          id: postId,
           name: title,
           poster: normalizePoster(poster),
         });
@@ -181,6 +133,29 @@ async function getEpisodes(postId) {
     released: new Date().toISOString()
   }));
 }
+
+/* =========================
+   STREMIO MANIFEST
+========================= */
+
+const manifest = {
+  id: "community.khmer.vip",
+  version: "1.0.0",
+  name: "Khmer VIP",
+  description: "Khmer VIP Blogger Streams",
+  resources: ["catalog", "meta", "stream"],
+  types: ["series"],
+  catalogs: [
+    {
+      type: "series",
+      id: "vip",
+      name: "VIP Latest",
+      extraSupported: ["search", "skip"],
+    },
+  ],
+};
+
+const builder = new addonBuilder(manifest);
 
 /* =========================
    CATALOG
@@ -226,13 +201,6 @@ builder.defineCatalogHandler(async ({ extra }) => {
 
 builder.defineMetaHandler(async ({ id }) => {
   try {
-    // Get series page to extract OG image
-    const seriesUrl = `${BASE_URL}/?p=${id}`;
-    const { data } = await axiosClient.get(seriesUrl);
-    const $ = cheerio.load(data);
-
-    const ogImage = $('meta[property="og:image"]').attr("content") || "";
-
     const episodes = await getEpisodes(id);
     if (!episodes.length) return { meta: null };
 
@@ -243,8 +211,8 @@ builder.defineMetaHandler(async ({ id }) => {
         id: id,
         type: "series",
         name: first.title,
-        poster: first.thumbnail,
-        background: normalizePoster(ogImage),
+        poster: normalizePoster(first.thumbnail),
+        background: normalizePoster(first.thumbnail),
         videos: episodes,
       },
     };
