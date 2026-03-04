@@ -5,7 +5,6 @@ const axios = require("axios");
 /* =========================
    STREMIO MANIFEST
 ========================= */
-
 const manifest = {
   id: "community.khmer.vip",
   version: "1.0.0",
@@ -75,7 +74,6 @@ async function getPostId(url) {
 /* =========================
    BLOGGER FETCH 
 ========================= */
-
 async function fetchFromBlog(blogId, postId) {
   const feedUrl = `https://www.blogger.com/feeds/${blogId}/posts/default/${postId}?alt=json`;
 
@@ -130,51 +128,54 @@ async function getStreamDetail(postId) {
 /* =========================
    SCRAPE CATALOG
 ========================= */
-
 async function getItems(url) {
   const { data } = await axiosClient.get(url);
   const $ = cheerio.load(data);
 
   const articles = $("article").toArray();
-  const results = [];
 
-  for (const el of articles) {
-    const $el = $(el);
-    const a = $el.find("h2 a, h3 a").first();
-    const img = $el.find("img").first();
+  const results = await Promise.all(
+    articles.map(async (el) => {
+      const $el = $(el);
+      const a = $el.find("h2 a, h3 a").first();
 
-    const title = a.text().trim();
-    const epMatch =
-      title.match(/\bEP\.?\s*(\d+)\b/i) ||
-      title.match(/\bEpisode\s*(\d+)\b/i) ||
-      title.match(/\[EP\.?\s*(\d+)\]/i);
-    const maxEp = epMatch ? parseInt(epMatch[1], 10) : null;
-    const link = a.attr("href");
-    if (!title || !link) continue;
+      const title = a.text().trim();
+      const link = a.attr("href");
+      if (!title || !link) return null;
 
-    const poster =
-      $el.find("a.img-holder").attr("data-src") ||
-      $el.find("a.img-holder").attr("data-bsrjs") ||
-      "";
+      const epMatch =
+        title.match(/\bEP\.?\s*(\d+)\b/i) ||
+        title.match(/\bEpisode\s*(\d+)\b/i) ||
+        title.match(/\[EP\.?\s*(\d+)\]/i);
 
-    try {
-      const postId = await getPostId(link);
-      if (postId) {
+      const maxEp = epMatch ? parseInt(epMatch[1], 10) : null;
+
+      const poster =
+        $el.find("a.img-holder").attr("data-src") ||
+        $el.find("a.img-holder").attr("data-bsrjs") ||
+        "";
+
+      try {
+        const postId = await getPostId(link);
+        if (!postId) return null;
+
         if (maxEp) {
           POST_INFO.set(postId, { maxEp });
         }
-        results.push({
+
+        return {
           id: postId,
           name: title,
           poster: normalizePoster(poster),
-        });
+        };
+      } catch {
+        return null;
       }
-    } catch {
-      continue;
-    }
-  }
+    })
+  );
 
-  return results;
+  // remove nulls
+  return results.filter(Boolean);
 }
 
 async function getEpisodes(postId) {
@@ -210,7 +211,6 @@ async function getEpisodes(postId) {
 /* =========================
    CATALOG
 ========================= */
-
 builder.defineCatalogHandler(async ({ extra }) => {
   try {
     const pageSize = 30; // VIP shows 30 per page
@@ -250,7 +250,6 @@ builder.defineCatalogHandler(async ({ extra }) => {
 /* =========================
    META
 ========================= */
-
 builder.defineMetaHandler(async ({ id }) => {
   try {
     const episodes = await getEpisodes(id);
@@ -276,7 +275,6 @@ builder.defineMetaHandler(async ({ id }) => {
 /* =========================
    STREAM
 ========================= */
-
 builder.defineStreamHandler(async ({ id }) => {
   try {
     const parts = id.split(":");
@@ -310,7 +308,6 @@ builder.defineStreamHandler(async ({ id }) => {
 /* =========================
    START SERVER
 ========================= */
-
 serveHTTP(builder.getInterface(), {
   port: process.env.PORT || 7000,
 });
