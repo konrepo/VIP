@@ -20,15 +20,14 @@ const axiosClient = axios.create({
 /* =========================
    UTIL
 ========================= */
-
-function extractVideoLinks(text) {
-  // poster
-  function normalizePoster(url) {
+function normalizePoster(url) {
   if (!url) return "";
   return url
     .replace(/\/s\d+\//, "/s0/")
     .replace(/=s\d+/, "=s0");
 }
+
+function extractVideoLinks(text) {
   const regex =
     /https?:\/\/[^\s"';<> ]+\.(?:m3u8|mp4)(?:\?[^\s"';<> ]+)?/gi;
   const matches = text.match(regex);
@@ -42,7 +41,7 @@ async function getPostId(url) {
 }
 
 /* =========================
-   BLOGGER FETCH (TRY BOTH)
+   BLOGGER FETCH 
 ========================= */
 
 async function fetchFromBlog(blogId, postId) {
