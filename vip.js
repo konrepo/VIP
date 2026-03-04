@@ -2,6 +2,29 @@ const { addonBuilder, serveHTTP } = require("stremio-addon-sdk");
 const cheerio = require("cheerio");
 const axios = require("axios");
 
+/* =========================
+   STREMIO MANIFEST
+========================= */
+
+const manifest = {
+  id: "community.khmer.vip",
+  version: "1.0.0",
+  name: "Khmer VIP",
+  description: "Khmer VIP Blogger Streams",
+  resources: ["catalog", "meta", "stream"],
+  types: ["series"],
+  catalogs: [
+    {
+      type: "series",
+      id: "vip",
+      name: "VIP Latest",
+      extraSupported: ["search", "skip"],
+    },
+  ],
+};
+
+const builder = new addonBuilder(manifest);
+
 const BASE_URL = "https://phumikhmer.vip";
 
 const POST_INFO = new Map(); // postId -> { maxEp?: number }
@@ -185,37 +208,14 @@ async function getEpisodes(postId) {
 }
 
 /* =========================
-   STREMIO MANIFEST
-========================= */
-
-const manifest = {
-  id: "community.khmer.vip",
-  version: "1.0.0",
-  name: "Khmer VIP",
-  description: "Khmer VIP Blogger Streams",
-  resources: ["catalog", "meta", "stream"],
-  types: ["series"],
-  catalogs: [
-    {
-      type: "series",
-      id: "vip",
-      name: "VIP Latest",
-      extraSupported: ["search", "skip"],
-    },
-  ],
-};
-
-const builder = new addonBuilder(manifest);
-
-/* =========================
    CATALOG
 ========================= */
 
 builder.defineCatalogHandler(async ({ extra }) => {
   try {
-    const page = extra?.skip
-      ? Math.ceil(extra.skip / 30) + 1
-      : 1;
+    const pageSize = 30; // VIP shows 30 per page
+    const skip = Number(extra?.skip || 0);
+    const page = Math.floor(skip / pageSize) + 1;
 
     const url =
       page === 1
@@ -232,6 +232,7 @@ builder.defineCatalogHandler(async ({ extra }) => {
       posterShape: "poster",
     }));
 
+    // search filter
     if (extra?.search) {
       const search = extra.search.toLowerCase();
       metas = metas.filter((m) =>
@@ -240,7 +241,8 @@ builder.defineCatalogHandler(async ({ extra }) => {
     }
 
     return { metas };
-  } catch {
+
+  } catch (err) {
     return { metas: [] };
   }
 });
