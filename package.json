@@ -1,7 +1,7 @@
 {
-  "name": "khmerdub",
-  "version": "1.0.0",
-  "description": "Stream Asian dramas dubbed in Khmer | Dev: TheDevilz.",
+  "name": "khmerdub-test",
+  "version": "1.2.0-test",
+  "description": "Stream Experimental Build | Dev: TheDevilz.",
   "main": "src/index.js",
   "type": "commonjs",
   "engines": {
@@ -12,7 +12,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/konrepo/KhmerDub.git"
+    "url": "https://github.com/konrepo/vip.git"
   },
   "license": "ISC",
   "dependencies": {
