@@ -1,18 +1,18 @@
 {
-  "name": "khmervip",
+  "name": "khmerdub",
   "version": "1.0.0",
-  "description": "Khmer VIP Stremio Addon",
-  "main": "vip.js",
+  "description": "Stream Asian dramas dubbed in Khmer | Dev: TheDevilz.",
+  "main": "src/index.js",
   "type": "commonjs",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "start": "node vip.js"
+    "start": "node src/index.js"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/konrepo/VIP.git"
+    "url": "https://github.com/konrepo/KhmerDub.git"
   },
   "license": "ISC",
   "dependencies": {
