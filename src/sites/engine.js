@@ -291,6 +291,7 @@ async function getStream(prefix, seriesUrl, episode) {
   }
 
   url = forceHttps(url);
+  console.log("FINAL STREAM URL:", url);
 
   return {
     url,
