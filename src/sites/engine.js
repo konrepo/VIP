@@ -121,7 +121,7 @@ async function getSundayPlaylist(seriesUrl) {
 
   // Extract playlist mp4 links
   const fileRegex =
-    /file\s*:\s*["'](https?:\/\/[^"']+\.mp4(?:\?[^"']+)?)["']/gi;
+    /file\s*:\s*["'](https?:\/\/[^"']+)["']/gi;
 
   const urls = [];
   let match;
