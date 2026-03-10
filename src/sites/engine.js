@@ -214,6 +214,28 @@ async function resolvePlayerUrl(playerUrl) {
 }
 
 /* =========================
+   RESOLVE OK
+========================= */
+async function resolveOkEmbed(embedUrl) {
+  const { data } = await axiosClient.get(embedUrl, {
+    headers: {
+      "User-Agent": "Mozilla/5.0",
+      Referer: "https://ok.ru/"
+    }
+  });
+
+  const hlsMatch =
+    data.match(/"hlsMasterUrl"\s*:\s*"([^"]+)"/i) ||
+    data.match(/"hlsManifestUrl"\s*:\s*"([^"]+)"/i);
+
+  if (!hlsMatch) return null;
+
+  return hlsMatch[1]
+    .replace(/\\u0026/g, "&")
+    .replace(/\\\//g, "/");
+}
+
+/* =========================
    STREAM
 ========================= */
 async function getStream(prefix, seriesUrl, episode) {
@@ -269,38 +291,47 @@ async function getStream(prefix, seriesUrl, episode) {
 	  return null;
   }
 
-  console.log("Selected URL:", url);
-
+  // Resolve player.php first
   if (url.includes("player.php")) {
-    const resolved = await resolvePlayerUrl(url);
-    if (!resolved) {
-		console.log("Player resolve failed");
-		return null;
-	}
-    url = resolved;
+	  const resolved = await resolvePlayerUrl(url);
+	  if (!resolved) {
+		  console.log("Player resolve failed");
+		  return null;
+	  }
+	  url = resolved;
   }
+
+  // Resolve OK embed page
+  if (url.includes("ok.ru/videoembed/")) {
+	  const resolved = await resolveOkEmbed(url);
+	  if (!resolved) {
+		  console.log("OK embed resolve failed");
+		  return null;
+	  }
+	  url = resolved;
+  }
+
+  console.log("Final URL:", url);
 
   const isOk = /ok\.ru|okcdn\.ru/i.test(url);
   console.log("Is OK stream:", isOk);
 
-  console.log("Returning stream:", url);
-
   return {
-    url,
-    name: "KhmerDub",
-    title: `Episode ${episode}`,
-    type: url.includes(".m3u8") ? "hls" : undefined,
-    behaviorHints: isOk
-      ? {
-          group: "khmerdub",
-          proxyHeaders: {
-            request: {
-              Referer: "https://ok.ru/",
-              Origin: "https://ok.ru"
-            }
-          }
-        }
-      : { group: "khmerdub" }
+	  url,
+	  name: "KhmerDub",
+	  title: `Episode ${episode}`,
+	  type: url.includes(".m3u8") ? "hls" : undefined,
+	  behaviorHints: isOk
+		  ? {
+			  group: "khmerdub",
+			  proxyHeaders: {
+				  request: {
+					  Referer: "https://ok.ru/",
+					  Origin: "https://ok.ru"
+				  }
+			  }
+		  }
+		  : { group: "khmerdub" }
   };
 }
 
