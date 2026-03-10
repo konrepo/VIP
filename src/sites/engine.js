@@ -232,20 +232,24 @@ async function getStream(prefix, seriesUrl, episode) {
     const url = links[episode - 1];
     if (!url) return null;
 
+    const isOk = /ok\.ru|okcdn\.ru/i.test(url);
+
     return {
       url,
       name: "KhmerDub",
       title: `Episode ${episode}`,
       type: url.includes(".m3u8") ? "hls" : undefined,
-      behaviorHints: {
-        group: "khmerdub",
-        proxyHeaders: {
-          request: {
-            Referer: seriesUrl,
-            Origin: "https://www.sundaydrama.com"
-          }
-        }
-      }
+      behaviorHints: isOk 
+		? {
+			group: "khmerdub",
+			proxyHeaders: {
+			  request: {
+				Referer: "https://ok.ru/",
+				Origin: "https://ok.ru",
+			  },
+			},
+		}
+      : { group: "khmerdub" },
     };
   }
 
@@ -263,12 +267,24 @@ async function getStream(prefix, seriesUrl, episode) {
     url = resolved;
   }
 
+  const isOk = /ok\.ru|okcdn\.ru/i.test(url);
+
   return {
     url,
     name: "KhmerDub",
     title: `Episode ${episode}`,
     type: url.includes(".m3u8") ? "hls" : undefined,
-    behaviorHints: { group: "khmerdub" },
+    behaviorHints: isOk
+      ? {
+          group: "khmerdub",
+          proxyHeaders: {
+            request: {
+              Referer: "https://ok.ru/",
+              Origin: "https://ok.ru"
+            }
+          }
+        }
+      : { group: "khmerdub" }
   };
 }
 
