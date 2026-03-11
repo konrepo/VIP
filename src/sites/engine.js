@@ -224,37 +224,40 @@ async function resolveOkEmbed(embedUrl) {
     }
   });
 
-  // OK usually stores metadata inside "data-options" JSON
-  const optionsMatch = data.match(/data-options="([^"]+)"/);
+  // Try direct HLS in page
+  const hlsDirect =
+    data.match(/"hlsMasterUrl"\s*:\s*"([^"]+)"/i) ||
+    data.match(/"hlsManifestUrl"\s*:\s*"([^"]+)"/i);
 
-  if (!optionsMatch) {
-    console.log("OK: data-options not found");
-    return null;
+  if (hlsDirect) {
+    return hlsDirect[1]
+      .replace(/\\u0026/g, "&")
+      .replace(/\\\//g, "/");
   }
 
-  const decoded = optionsMatch[1]
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, '&');
+  // Try inside window.__PLAYER_CONFIG__
+  const configMatch = data.match(/window\.__PLAYER_CONFIG__\s*=\s*(\{.*?\});/s);
 
-  try {
-    const json = JSON.parse(decoded);
-
-    if (json.flashvars && json.flashvars.metadata) {
-      const metadata = JSON.parse(json.flashvars.metadata);
-
-      if (metadata.hlsMasterPlaylistUrl) {
-        return metadata.hlsMasterPlaylistUrl;
+  if (configMatch) {
+    try {
+      const config = JSON.parse(configMatch[1]);
+      if (config?.hlsManifestUrl) {
+        return config.hlsManifestUrl;
       }
-
-      if (metadata.hlsManifestUrl) {
-        return metadata.hlsManifestUrl;
-      }
+    } catch (e) {
+      console.log("OK: PLAYER_CONFIG parse failed");
     }
-  } catch (e) {
-    console.log("OK: JSON parse failed");
   }
 
-  console.log("OK: HLS not found in metadata");
+  // Fallback: search any .m3u8 in page
+  const m3u8Match = data.match(/https?:\/\/[^"]+\.m3u8[^"]*/i);
+  if (m3u8Match) {
+    return m3u8Match[0]
+      .replace(/\\u0026/g, "&")
+      .replace(/\\\//g, "/");
+  }
+
+  console.log("OK: HLS not found in page");
   return null;
 }
 
