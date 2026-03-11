@@ -224,9 +224,9 @@ async function resolveOkEmbed(embedUrl) {
     }
   });
 
-  // Match \&quot;ondemandHls\&quot;:\&quot;https://...m3u8\&quot;
+  // Match exactly until .m3u8
   const hlsMatch = data.match(
-    /\\&quot;ondemandHls\\&quot;:\\&quot;(https:\/\/[^"]+\.m3u8[^"]*)\\&quot;/
+    /\\&quot;ondemandHls\\&quot;:\\&quot;(https:\/\/[^"]+?\.m3u8)/
   );
 
   if (!hlsMatch) {
