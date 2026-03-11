@@ -224,8 +224,8 @@ async function resolveOkEmbed(embedUrl) {
     }
   });
 
-  // Extract flashvars.metadata JSON string
-  const metadataMatch = data.match(/"metadata":"({.*?})"/s);
+  // Match escaped metadata string
+  const metadataMatch = data.match(/&quot;metadata&quot;:&quot;({.*?})&quot;/s);
 
   if (!metadataMatch) {
     console.log("OK: metadata not found");
@@ -234,8 +234,9 @@ async function resolveOkEmbed(embedUrl) {
 
   try {
     const metadataJson = metadataMatch[1]
-      .replace(/\\"/g, '"')        // unescape quotes
-      .replace(/\\u0026/g, "&");   // fix &
+      .replace(/\\&quot;/g, '"')  // unescape embedded quotes
+      .replace(/&quot;/g, '"')
+      .replace(/\\u0026/g, "&");
 
     const metadata = JSON.parse(metadataJson);
 
