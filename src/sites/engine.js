@@ -224,15 +224,38 @@ async function resolveOkEmbed(embedUrl) {
     }
   });
 
-  const hlsMatch =
-    data.match(/"hlsMasterUrl"\s*:\s*"([^"]+)"/i) ||
-    data.match(/"hlsManifestUrl"\s*:\s*"([^"]+)"/i);
+  // OK usually stores metadata inside "data-options" JSON
+  const optionsMatch = data.match(/data-options="([^"]+)"/);
 
-  if (!hlsMatch) return null;
+  if (!optionsMatch) {
+    console.log("OK: data-options not found");
+    return null;
+  }
 
-  return hlsMatch[1]
-    .replace(/\\u0026/g, "&")
-    .replace(/\\\//g, "/");
+  const decoded = optionsMatch[1]
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&');
+
+  try {
+    const json = JSON.parse(decoded);
+
+    if (json.flashvars && json.flashvars.metadata) {
+      const metadata = JSON.parse(json.flashvars.metadata);
+
+      if (metadata.hlsMasterPlaylistUrl) {
+        return metadata.hlsMasterPlaylistUrl;
+      }
+
+      if (metadata.hlsManifestUrl) {
+        return metadata.hlsManifestUrl;
+      }
+    }
+  } catch (e) {
+    console.log("OK: JSON parse failed");
+  }
+
+  console.log("OK: HLS not found in metadata");
+  return null;
 }
 
 /* =========================
