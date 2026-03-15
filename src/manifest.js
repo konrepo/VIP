@@ -4,12 +4,20 @@ module.exports = {
   name: "KhmerDub Test",
   description: "Stream Experimental Build | Dev: TheDevilz.",
   logo: "https://raw.githubusercontent.com/konrepo/VIP/refs/heads/main/test.png",
-
-  resources: ["catalog", "meta", "stream"],
   types: ["series"],
-
-  idPrefixes: ["vip", "sunday", "idrama", "khmerave", "merlkon"],
-
+  resources: [
+    "catalog",
+    {
+      name: "meta",
+      types: ["series"],
+      idPrefixes: ["vip", "sunday", "idrama", "khmerave", "merlkon"]
+    },
+    {
+      name: "stream",
+      types: ["series"],
+      idPrefixes: ["vip", "sunday", "idrama", "khmerave", "merlkon"]
+    }
+  ],
   catalogs: [
     {
       type: "series",
