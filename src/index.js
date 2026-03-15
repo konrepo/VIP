@@ -223,27 +223,28 @@ builder.defineMetaHandler(async ({ id }) => {
   try {
     console.log("META REQUEST ID:", id);
 
-    const parts = id.split(":");
-    console.log("META PARTS:", parts);
+    const firstColon = id.indexOf(":");
+    if (firstColon === -1) return { meta: null };
 
-    if (parts.length < 2) return { meta: null };
+    const prefix = id.slice(0, firstColon);
+    const encodedUrl = id.slice(firstColon + 1);
 
-    const prefix = parts[0];
-    const encodedUrl = parts[1];
+    console.log("META PREFIX:", prefix);
+    console.log("META ENCODED URL:", encodedUrl);
 
     if (!sites[prefix]) return { meta: null };
 
     let seriesUrl;
-    try {
-      seriesUrl = Buffer.from(encodedUrl, "base64").toString("utf8");
-      if (!seriesUrl.startsWith("http")) {
-        seriesUrl = decodeURIComponent(encodedUrl);
-      }
-    } catch {
-      seriesUrl = decodeURIComponent(encodedUrl);
-    }
 
-    console.log("META SERIES URL:", seriesUrl);
+	if (encodedUrl.startsWith("http")) {
+	  seriesUrl = encodedUrl;
+	} else if (encodedUrl.includes("%")) {
+	  seriesUrl = decodeURIComponent(encodedUrl);
+	} else {
+	  seriesUrl = Buffer.from(encodedUrl, "base64").toString("utf8");
+	}
+
+	console.log("META SERIES URL:", seriesUrl);
 
     const siteEngine = ENGINES[prefix];
     if (!siteEngine) return { meta: null };
@@ -268,7 +269,8 @@ builder.defineMetaHandler(async ({ id }) => {
         }))
       }
     };
-  } catch {
+  } catch (err) {
+    console.error("META ERROR:", err);
     return { meta: null };
   }
 });

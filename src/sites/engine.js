@@ -124,9 +124,15 @@ async function getStreamDetail(postId) {
    EPISODES
 ========================= */
 async function getEpisodes(prefix, seriesUrl) {
+
+  // prevent homepage being treated as a series
+  if (seriesUrl === "https://phumikhmer.vip/" || seriesUrl.endsWith(".vip/")) {
+    console.log("INVALID SERIES URL:", seriesUrl);
+    return [];
+  }
+
   const postId = await getPostId(seriesUrl);
   console.log("POST ID:", postId);
-  console.log("EPISODES GENERATED:", urls.length);
 
   // Sunday playlist
   if (!postId && prefix === "sunday") {
@@ -186,6 +192,7 @@ async function getEpisodes(prefix, seriesUrl) {
   if (maxEp && urls.length > maxEp) {
     urls = urls.slice(0, maxEp);
   }
+  console.log("EPISODES GENERATED:", urls.length);
 
   return urls.map((url, index) => {
     const encoded = Buffer.from(seriesUrl).toString("base64");
@@ -381,7 +388,8 @@ async function getCatalogItems(prefix, siteConfig, url) {
           a.text().trim();
 
         const link = a.attr("href");
-        if (!title || !link) continue;
+        if (!title || !link) return null;
+		if (link === "/" || link === "#" || link.startsWith("javascript")) return null;
 
         let poster = "";
         const posterEl = $el.find(siteConfig.posterSelector).first();
@@ -414,8 +422,23 @@ async function getCatalogItems(prefix, siteConfig, url) {
       const a = $el.find(siteConfig.titleSelector).first();
 
       const title = a.text().trim();
-      const link = a.attr("href");
+      let link = a.attr("href");
+	  
       if (!title || !link) return null;
+
+      // convert relative links to absolute
+      if (link.startsWith("/")) {
+        link = new URL(link, siteConfig.baseUrl).href;
+      }
+
+      // filter invalid links
+      if (
+        link === siteConfig.baseUrl ||
+        link === siteConfig.baseUrl + "/" ||
+        link === "https://phumikhmer.vip/" ||
+        link === "#" ||
+        link.startsWith("javascript")
+      ) return null;
 
       let poster = "";
       const posterEl = $el.find(siteConfig.posterSelector).first();
