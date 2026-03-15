@@ -224,7 +224,10 @@ builder.defineMetaHandler(async ({ id }) => {
     console.log("META REQUEST ID:", id);
 
     const firstColon = id.indexOf(":");
-    if (firstColon === -1) return { meta: null };
+    if (firstColon === -1) {
+		console.log("META CATALOG REQUEST:", id);
+		return { meta: null };
+	}
 
     const prefix = id.slice(0, firstColon);
     const encodedUrl = id.slice(firstColon + 1);
