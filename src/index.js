@@ -221,15 +221,23 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 ========================= */
 builder.defineMetaHandler(async ({ id }) => {
   try {
-    const firstColon = id.indexOf(":");
-    if (firstColon === -1) return { meta: null };
+    const parts = id.split(":");
+    if (parts.length < 2) return { meta: null };
 
-    const prefix = id.slice(0, firstColon);
-    const encodedUrl = id.slice(firstColon + 1);
+    const prefix = parts[0];
+    const encodedUrl = parts[1];
 
     if (!sites[prefix]) return { meta: null };
 
-    const seriesUrl = Buffer.from(encodedUrl, "base64").toString("utf8");
+    let seriesUrl;
+    try {
+      seriesUrl = Buffer.from(encodedUrl, "base64").toString("utf8");
+      if (!seriesUrl.startsWith("http")) {
+        seriesUrl = decodeURIComponent(encodedUrl);
+      }
+    } catch {
+      seriesUrl = decodeURIComponent(encodedUrl);
+    }
 
     const siteEngine = ENGINES[prefix];
     if (!siteEngine) return { meta: null };
@@ -248,14 +256,13 @@ builder.defineMetaHandler(async ({ id }) => {
         background: first.thumbnail,
         videos: episodes.map(ep => ({
           id: ep.id,
-          name: `Episode ${ep.episode}`,
+          title: `Episode ${ep.episode}`,
           season: ep.season,
-          episode: ep.episode,
-		  thumbnail: first.thumbnail
-        })),
-      },
+          episode: ep.episode
+        }))
+      }
     };
-  } catch (err) {
+  } catch {
     return { meta: null };
   }
 });
