@@ -266,6 +266,7 @@ builder.defineMetaHandler(async ({ id, type }) => {
         background: first.thumbnail,
         videos: episodes.map(ep => ({
           id: ep.id,
+		  type: "episode",
           title: `Episode ${ep.episode}`,
           season: ep.season,
           episode: ep.episode
