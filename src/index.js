@@ -250,9 +250,7 @@ builder.defineMetaHandler(async ({ id }) => {
           id: ep.id,
           name: ep.title,
           season: ep.season,
-          episode: ep.episode,
-          thumbnail: ep.thumbnail,
-          released: ep.released
+          episode: ep.episode
         })),
       },
     };
