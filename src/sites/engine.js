@@ -157,7 +157,7 @@ async function getEpisodes(prefix, seriesUrl) {
       const encoded = Buffer.from(seriesUrl).toString("base64");
 
       return {
-        id: `${prefix}:${encoded}:1:${index + 1}`,
+        id: `${prefix}:${encodeURIComponent(seriesUrl)}:${index + 1}`,
         title: `Episode ${index + 1}`,
         season: 1,
         episode: index + 1,
@@ -198,7 +198,7 @@ async function getEpisodes(prefix, seriesUrl) {
     const encoded = Buffer.from(seriesUrl).toString("base64");
 
     return {
-      id: `${prefix}:${encoded}:1:${index + 1}`,
+      id: `${prefix}:${encodeURIComponent(seriesUrl)}:${index + 1}`,
       title: detail.title,
       season: 1,
       episode: index + 1,
