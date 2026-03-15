@@ -267,17 +267,13 @@ builder.defineStreamHandler(async ({ id }) => {
   try {
     const parts = id.split(":");
 
-    let prefix, encodedUrl, episode;
-
-    if (parts.length === 3) {
-      [prefix, encodedUrl, episode] = parts;
-    } else if (parts.length === 4) {
-      prefix = parts[0];
-      encodedUrl = parts[1];
-      episode = parts[3];
-    } else {
+    if (parts.length !== 4) {
       return { streams: [] };
     }
+
+    const prefix = parts[0];
+    const encodedUrl = parts[1];
+    const episode = parts[3];
 
     if (!sites[prefix]) return { streams: [] };
 

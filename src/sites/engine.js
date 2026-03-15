@@ -130,12 +130,12 @@ async function getEpisodes(prefix, seriesUrl) {
   // Sunday playlist
   if (!postId && prefix === "sunday") {
     const { data } = await axiosClient.get(seriesUrl);
-	
-    const $ = cheerio.load(data);	
-	const pagePoster =
+
+    const $ = cheerio.load(data);
+    const pagePoster =
       $("meta[property='og:image']").attr("content") ||
-	  $("link[rel='image_src']").attr("href") ||
-	  "";
+      $("link[rel='image_src']").attr("href") ||
+      "";
 
     const fileRegex =
       /file\s*:\s*["'](https?:\/\/[^"']+\.mp4(?:\?[^"']+)?)["']/gi;
@@ -146,14 +146,18 @@ async function getEpisodes(prefix, seriesUrl) {
       urls.push(match[1]);
     }
 
-    return urls.map((url, index) => ({
-      id: `${prefix}:${encodeURIComponent(seriesUrl)}:1:${index + 1}`,
-      title: `Episode ${index + 1}`,
-      season: 1,
-      episode: index + 1,
-      thumbnail: normalizePoster(pagePoster),
-      released: new Date().toISOString(),
-    }));
+    return urls.map((url, index) => {
+      const encoded = Buffer.from(seriesUrl).toString("base64");
+
+      return {
+        id: `${prefix}:${encoded}:1:${index + 1}`,
+        title: `Episode ${index + 1}`,
+        season: 1,
+        episode: index + 1,
+        thumbnail: normalizePoster(pagePoster),
+        released: new Date().toISOString()
+      };
+    });
   }
 
   if (!postId) {
@@ -182,15 +186,20 @@ async function getEpisodes(prefix, seriesUrl) {
     urls = urls.slice(0, maxEp);
   }
 
-  return urls.map((url, index) => ({
-    id: `${prefix}:${encodeURIComponent(seriesUrl)}:1:${index + 1}`,
-    title: detail.title,
-    season: 1,
-    episode: index + 1,
-    thumbnail: detail.thumbnail,
-    released: new Date().toISOString(),
-  }));
+  return urls.map((url, index) => {
+    const encoded = Buffer.from(seriesUrl).toString("base64");
+
+    return {
+      id: `${prefix}:${encoded}:1:${index + 1}`,
+      title: detail.title,
+      season: 1,
+      episode: index + 1,
+      thumbnail: detail.thumbnail,
+      released: new Date().toISOString()
+    };
+  });
 }
+
 
 /* =========================
    PLAYER RESOLVE
