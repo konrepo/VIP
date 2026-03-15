@@ -261,13 +261,13 @@ builder.defineMetaHandler(async ({ id, type }) => {
       meta: {
         id: `${prefix}:${encodeURIComponent(seriesUrl)}`,
         type: "series",
-        name: first.title.replace(/\s*-\s*\[?EP.*$/i, "").trim(),
+        //name: first.title.replace(/\s*-\s*\[?EP.*$/i, "").trim(),
         poster: first.thumbnail,
         background: first.thumbnail,
         videos: episodes.map(ep => ({
           id: ep.id,
 		  type: "episode",
-          name: `Episode ${ep.episode}`,
+          title: `Episode ${ep.episode}`,
           season: ep.season,
           episode: ep.episode,
 		  released: new Date().toISOString()
