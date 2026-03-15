@@ -269,7 +269,8 @@ builder.defineMetaHandler(async ({ id, type }) => {
 		  type: "episode",
           title: `Episode ${ep.episode}`,
           season: ep.season,
-          episode: ep.episode
+          episode: ep.episode,
+		  released: new Date().toISOString()
         }))
       }
     };
