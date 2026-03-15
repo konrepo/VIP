@@ -229,7 +229,7 @@ builder.defineMetaHandler(async ({ id }) => {
 
     if (!sites[prefix]) return { meta: null };
 
-    const seriesUrl = decodeURIComponent(encodedUrl);
+    const seriesUrl = Buffer.from(encodedUrl, "base64").toString("utf8");
 
     const siteEngine = ENGINES[prefix];
     if (!siteEngine) return { meta: null };
@@ -248,10 +248,10 @@ builder.defineMetaHandler(async ({ id }) => {
         background: first.thumbnail,
         videos: episodes.map(ep => ({
           id: ep.id,
-          type: "episode",
           name: `Episode ${ep.episode}`,
           season: ep.season,
-          episode: ep.episode
+          episode: ep.episode,
+		  thumbnail: first.thumbnail
         })),
       },
     };
@@ -282,7 +282,7 @@ builder.defineStreamHandler(async ({ id }) => {
       return { streams: [] };
     }
 
-    const seriesUrl = decodeURIComponent(encodedUrl);
+    const seriesUrl = Buffer.from(encodedUrl, "base64").toString("utf8");
 
     const siteEngine = ENGINES[prefix];
     if (!siteEngine) return { streams: [] };
