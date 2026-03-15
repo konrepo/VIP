@@ -259,7 +259,7 @@ builder.defineMetaHandler(async ({ id, type }) => {
 
     return {
       meta: {
-        id: `${prefix}:${encodedUrl}`,
+        id: `${prefix}:${encodeURIComponent(seriesUrl)}`,
         type: "series",
         name: first.title.replace(/\s*-\s*\[?EP.*$/i, "").trim(),
         poster: first.thumbnail,
