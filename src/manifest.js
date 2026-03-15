@@ -6,7 +6,11 @@ module.exports = {
   logo: "https://raw.githubusercontent.com/konrepo/VIP/refs/heads/main/test.png",
   types: ["series"],
   resources: [
-    "catalog",
+    {
+      name: "catalog",
+      types: ["series"],
+      idPrefixes: ["vip", "sunday", "idrama", "khmerave", "merlkon"]
+    },  
     {
       name: "meta",
       types: ["series"],
