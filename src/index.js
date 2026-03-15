@@ -267,7 +267,7 @@ builder.defineMetaHandler(async ({ id, type }) => {
         videos: episodes.map(ep => ({
           id: ep.id,
 		  type: "episode",
-          title: `Episode ${ep.episode}`,
+          name: `Episode ${ep.episode}`,
           season: ep.season,
           episode: ep.episode,
 		  released: new Date().toISOString()
