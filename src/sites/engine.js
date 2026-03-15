@@ -126,6 +126,7 @@ async function getStreamDetail(postId) {
 async function getEpisodes(prefix, seriesUrl) {
   const postId = await getPostId(seriesUrl);
   console.log("POST ID:", postId);
+  console.log("EPISODES GENERATED:", urls.length);
 
   // Sunday playlist
   if (!postId && prefix === "sunday") {

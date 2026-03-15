@@ -221,7 +221,11 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 ========================= */
 builder.defineMetaHandler(async ({ id }) => {
   try {
+    console.log("META REQUEST ID:", id);
+
     const parts = id.split(":");
+    console.log("META PARTS:", parts);
+
     if (parts.length < 2) return { meta: null };
 
     const prefix = parts[0];
@@ -238,6 +242,8 @@ builder.defineMetaHandler(async ({ id }) => {
     } catch {
       seriesUrl = decodeURIComponent(encodedUrl);
     }
+
+    console.log("META SERIES URL:", seriesUrl);
 
     const siteEngine = ENGINES[prefix];
     if (!siteEngine) return { meta: null };
@@ -272,7 +278,11 @@ builder.defineMetaHandler(async ({ id }) => {
 ========================= */
 builder.defineStreamHandler(async ({ id }) => {
   try {
+
+    console.log("STREAM REQUEST ID:", id);
+
     const parts = id.split(":");
+    console.log("STREAM PARTS:", parts);
 
     if (parts.length !== 4) {
       return { streams: [] };
