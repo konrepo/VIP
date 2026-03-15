@@ -219,15 +219,15 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 /* =========================
    META
 ========================= */
-builder.defineMetaHandler(async ({ id }) => {
+builder.defineMetaHandler(async ({ id, type }) => {
   try {
+
+    if (type && type !== "series") return { meta: null };
+
     console.log("META REQUEST ID:", id);
 
     const firstColon = id.indexOf(":");
-    if (firstColon === -1) {
-		console.log("META CATALOG REQUEST:", id);
-		return { meta: null };
-	}
+    if (firstColon === -1) return { meta: null };
 
     const prefix = id.slice(0, firstColon);
     const encodedUrl = id.slice(firstColon + 1);
@@ -266,7 +266,7 @@ builder.defineMetaHandler(async ({ id }) => {
         background: first.thumbnail,
         videos: episodes.map(ep => ({
           id: ep.id,
-          name: `Episode ${ep.episode}`,
+          title: `Episode ${ep.episode}`,
           season: ep.season,
           episode: ep.episode
         }))
