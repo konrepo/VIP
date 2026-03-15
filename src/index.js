@@ -243,7 +243,7 @@ builder.defineMetaHandler(async ({ id }) => {
       meta: {
         id,
         type: "series",
-        name: first.title,
+        name: first.title.replace(/\s*-\s*\[?EP.*$/i, "").trim(),
         poster: first.thumbnail,
         background: first.thumbnail,
         videos: episodes.map(ep => ({
