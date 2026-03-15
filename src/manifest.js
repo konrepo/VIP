@@ -10,7 +10,7 @@ module.exports = {
       name: "catalog",
       types: ["series"],
       idPrefixes: ["vip", "sunday", "idrama", "khmerave", "merlkon"]
-    },  
+    },
     {
       name: "meta",
       types: ["series"],
