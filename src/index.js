@@ -97,7 +97,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
         ),
         cacheMaxAge: 3600
       };
-    }}
+    }
 
     // SundayDrama (Blogger): search + paging
     if (id === "sunday") {
