@@ -61,7 +61,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 
       const skip = Number(extra?.skip || 0);
       const startPage =
-        Math.floor(skip / STREMIO_PAGE_SIZE) *
+        Math.floor(skip / (STREMIO_PAGE_SIZE * 3)) *
           PAGES_PER_BATCH +
         1;
 
