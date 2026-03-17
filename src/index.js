@@ -56,7 +56,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
     // KhmerAve / Merlkon: paging
     if (id === "khmerave" || id === "merlkon") {
       const WEBSITE_PAGE_SIZE = site.pageSize || 18;
-      const PAGES_PER_BATCH = 3;
+      const PAGES_PER_BATCH = 6;
 
       const skip = Number(extra?.skip || 0);
       const startPage =
