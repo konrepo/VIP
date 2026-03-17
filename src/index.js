@@ -57,15 +57,10 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
     if (id === "khmerave" || id === "merlkon") {
       const WEBSITE_PAGE_SIZE = site.pageSize || 18;
       const PAGES_PER_BATCH = 6;
-      const STREMIO_STEP = 600;
-      const WEBSITE_STEP = 18;
 
       const skip = Number(extra?.skip || 0);
-
       const startPage =
-        Math.floor(skip / STREMIO_STEP) *
-          WEBSITE_STEP +
-        1;
+        Math.floor(skip / WEBSITE_PAGE_SIZE) + 1;
 
       console.log("CATALOG DEBUG:", {
         id,
@@ -100,7 +95,6 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
         cacheMaxAge: 3600
       };
     }
-
     // SundayDrama (Blogger): search + paging
     if (id === "sunday") {
       const base = String(site.baseUrl || "").replace(/\/$/, "");
