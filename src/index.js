@@ -57,11 +57,12 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
     if (id === "khmerave" || id === "merlkon") {
       const WEBSITE_PAGE_SIZE = site.pageSize || 18;
       const PAGES_PER_BATCH = 6;
+      const STREMIO_PAGE_SIZE = 100;
 
       const skip = Number(extra?.skip || 0);
       const startPage =
-        Math.floor(skip / (WEBSITE_PAGE_SIZE * PAGES_PER_BATCH)) *
-        PAGES_PER_BATCH +
+        Math.floor(skip / STREMIO_PAGE_SIZE) *
+          PAGES_PER_BATCH +
         1;
 
       const base = String(site.baseUrl || "").replace(/\/$/, "");
@@ -86,7 +87,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
           uniq.slice(0, WEBSITE_PAGE_SIZE * PAGES_PER_BATCH),
           TYPE
         ),
-		cacheMaxAge: 3600
+        cacheMaxAge: 3600
       };
     }
 
