@@ -57,13 +57,21 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
     if (id === "khmerave" || id === "merlkon") {
       const WEBSITE_PAGE_SIZE = site.pageSize || 18;
       const PAGES_PER_BATCH = 6;
-      const STREMIO_PAGE_SIZE = 100;
 
       const skip = Number(extra?.skip || 0);
+
       const startPage =
-        Math.floor(skip / (STREMIO_PAGE_SIZE * 3)) *
+        Math.floor(skip / (WEBSITE_PAGE_SIZE * PAGES_PER_BATCH)) *
           PAGES_PER_BATCH +
         1;
+
+      console.log("CATALOG DEBUG:", {
+        id,
+        skip,
+        WEBSITE_PAGE_SIZE,
+        PAGES_PER_BATCH,
+        startPage
+      });
 
       const base = String(site.baseUrl || "").replace(/\/$/, "");
       const pages = [];
@@ -89,7 +97,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
         ),
         cacheMaxAge: 3600
       };
-    }
+    }}
 
     // SundayDrama (Blogger): search + paging
     if (id === "sunday") {
