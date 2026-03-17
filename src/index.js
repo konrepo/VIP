@@ -56,7 +56,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
     // KhmerAve / Merlkon: paging
     if (id === "khmerave" || id === "merlkon") {
       const WEBSITE_PAGE_SIZE = site.pageSize || 18;
-      const PAGES_PER_BATCH = 6;
+      const PAGES_PER_BATCH = 1;
 
       const skip = Number(extra?.skip || 0);
       const startPage =
@@ -66,35 +66,23 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
         id,
         skip,
         WEBSITE_PAGE_SIZE,
-        PAGES_PER_BATCH,
         startPage
       });
 
       const base = String(site.baseUrl || "").replace(/\/$/, "");
-      const pages = [];
+      const url =
+        startPage === 1 ? `${base}/` : `${base}/page/${startPage}/`;
 
-      for (let p = startPage; p < startPage + PAGES_PER_BATCH; p++) {
-        const url =
-          p === 1 ? `${base}/` : `${base}/page/${p}/`;
+      const items = await siteEngine.getCatalogItems(id, site, url);
 
-        pages.push(siteEngine.getCatalogItems(id, site, url));
-      }
-
-      const results = await Promise.all(pages);
-      const allItems = results.flat();
-
-      if (!allItems.length) return { metas: [] };
-
-      const uniq = uniqById(allItems);
+      if (!items.length) return { metas: [] };
 
       return {
-        metas: mapMetas(
-          uniq.slice(0, WEBSITE_PAGE_SIZE * PAGES_PER_BATCH),
-          TYPE
-        ),
+        metas: mapMetas(items, TYPE),
         cacheMaxAge: 3600
       };
     }
+	
     // SundayDrama (Blogger): search + paging
     if (id === "sunday") {
       const base = String(site.baseUrl || "").replace(/\/$/, "");
