@@ -207,29 +207,28 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
     }
 
     // VIP / iDrama: normal paging
+    const base = String(site.baseUrl || "").replace(/\/$/, "");
+
     const WEBSITE_PAGE_SIZE = site.pageSize || 30;
     const PAGES_PER_BATCH = 2;
 
     const skip = Number(extra?.skip || 0);
+    const targetPage = Math.floor(skip / WEBSITE_PAGE_SIZE) + 1;
 
-    // Convert skip → page index directly
-    const startPage =
-      Math.floor(skip / WEBSITE_PAGE_SIZE) *
-        PAGES_PER_BATCH +
-      1;
+    let url = targetPage === 1
+      ? `${base}/`
+      : `${base}/page/${targetPage}/`;
 
-    const base = String(site.baseUrl || "").replace(/\/$/, "");
-    const pages = [];
+    let currentPage = targetPage;
+    let allItems = [];
 
-    for (let p = startPage; p < startPage + PAGES_PER_BATCH; p++) {
-      const url =
-        p === 1 ? `${base}/` : `${base}/page/${p}/`;
+    for (let i = 0; i < PAGES_PER_BATCH && url; i++) {
+      const items = await siteEngine.getCatalogItems(id, site, url);
+      allItems.push(...items);
 
-      pages.push(siteEngine.getCatalogItems(id, site, url));
+      currentPage++;
+      url = `${base}/page/${currentPage}/`;
     }
-
-    const results = await Promise.all(pages);
-    const allItems = results.flat();
 
     if (!allItems.length) return { metas: [] };
 
