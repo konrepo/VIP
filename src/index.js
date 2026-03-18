@@ -208,38 +208,27 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 
     // VIP / iDrama: normal paging
     const base = String(site.baseUrl || "").replace(/\/$/, "");
-
-    const WEBSITE_PAGE_SIZE = site.pageSize || 30;
-    const PAGES_PER_BATCH = 2;
+    const pageSize = site.pageSize || 30;
 
     const skip = Number(extra?.skip || 0);
-    const targetPage = Math.floor(skip / WEBSITE_PAGE_SIZE) + 1;
 
-    let url = targetPage === 1
-      ? `${base}/`
-      : `${base}/page/${targetPage}/`;
+    // Direct mapping: skip → page
+    const page = Math.floor(skip / pageSize) + 1;
 
-    let currentPage = targetPage;
-    let allItems = [];
+    const url = extra?.search
+      ? `${base}/?s=${encodeURIComponent(extra.search)}`
+      : page === 1
+        ? `${base}/`
+        : `${base}/page/${page}/`;
 
-    for (let i = 0; i < PAGES_PER_BATCH && url; i++) {
-      const items = await siteEngine.getCatalogItems(id, site, url);
-      allItems.push(...items);
+    const items = await siteEngine.getCatalogItems(id, site, url);
 
-      currentPage++;
-      url = `${base}/page/${currentPage}/`;
-    }
+    if (!items.length) return { metas: [] };
 
-    if (!allItems.length) return { metas: [] };
-
-    const uniq = uniqById(allItems);
-    const fixed = applyMetaId(uniq, id);
+    const fixed = applyMetaId(items, id);
 
     const result = {
-      metas: mapMetas(
-        fixed.slice(0, WEBSITE_PAGE_SIZE * PAGES_PER_BATCH),
-        TYPE
-      ),
+      metas: mapMetas(fixed, TYPE),
       cacheMaxAge: 3600
     };
 
