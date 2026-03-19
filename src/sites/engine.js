@@ -282,30 +282,51 @@ async function resolveOkEmbed(embedUrl) {
 
 function buildStream(url, episode) {
   const isOk = /ok\.ru|okcdn\.ru/i.test(url);
+  const isM3U8 = url.includes(".m3u8");
 
   return {
     url,
     name: "KhmerDub",
     title: `Episode ${episode}`,
-    type: url.includes(".m3u8") ? "hls" : undefined,
-    behaviorHints: isOk
-      ? {
-          group: "khmerdub",
-          proxyHeaders: {
-            request: {
-              Referer: "https://ok.ru/",
-              Origin: "https://ok.ru"
-            }
+    type: isM3U8 ? "hls" : undefined,
+
+    behaviorHints: {
+      group: "khmerdub",
+
+      // ALWAYS send headers for HLS
+      ...(isM3U8 && {
+        proxyHeaders: {
+          request: {
+            Referer: "https://www.sundaydrama.com/",
+            Origin: "https://www.sundaydrama.com"
           }
         }
-      : { group: "khmerdub" }
+      }),
+
+      // keep OK special handling
+      ...(isOk && {
+        proxyHeaders: {
+          request: {
+            Referer: "https://ok.ru/",
+            Origin: "https://ok.ru"
+          }
+        }
+      })
+    }
   };
-}
+}}
 
 /* =========================
    STREAM
 ========================= */
 async function getStream(prefix, episodeUrl, episode) {
+	
+  console.log("STREAM DEBUG:", {
+    prefix,
+    episode,
+    episodeUrl
+  });
+	
   // Sunday fallback
   if (prefix === "sunday") {
     const { data } = await axiosClient.get(episodeUrl, {
@@ -338,6 +359,8 @@ async function getStream(prefix, episodeUrl, episode) {
     if (!resolved) return null;
     url = resolved;
   }
+
+  console.log("FINAL STREAM URL:", url);
 
   return buildStream(url, episode);
 }
