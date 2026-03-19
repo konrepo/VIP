@@ -53,9 +53,10 @@ function extractMaxEpFromTitle(title) {
   if (!title) return null;
 
   const match =
+    title.match(/\[(\d+)\s*END\]/i) ||  
+    title.match(/\[(\d+)\]/i) ||         
     title.match(/\bEP\.?\s*-?\s*(\d+)\b/i) ||
-    title.match(/\bEpisode\s*-?\s*(\d+)\b/i) ||
-    title.match(/\[EP\.?\s*(\d+)\]/i);
+    title.match(/\bEpisode\s*-?\s*(\d+)\b/i);
 
   return match ? parseInt(match[1], 10) : null;
 }
