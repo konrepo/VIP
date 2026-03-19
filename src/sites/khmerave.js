@@ -77,6 +77,7 @@ async function getEpisodes(prefix, seriesUrl) {
 
     const pageTitle = $("h1").first().text().trim() || seriesUrl;
 
+    // poster
     let poster = "";
     const imgDiv = $(".album-content-image");
     if (imgDiv.length) {
@@ -85,28 +86,44 @@ async function getEpisodes(prefix, seriesUrl) {
 
     let eps = [];
 
-    // Fixed loop
+    // =========================
+    // EPISODE EXTRACTION
+    // =========================
     $("a[href]").each((_, el) => {
       const link = $(el).attr("href");
       if (!link) return;
 
-      if (!link.includes("/videos/")) return;
+      // skip junk
       if (link.includes("?post_type=videos")) return;
 
-      const m = link.match(/-(\d+)(?:\/|$)/);
-      if (!m) return;
+      let epNumber = null;
 
-      const epNumber = parseInt(m[1], 10);
+      // normal episode links
+      const m = link.match(/-(\d+)(?:\/|$)/);
+      if (m) {
+        epNumber = parseInt(m[1], 10);
+      }
+
+      // fallback for Episode 1 (album link)
+      if (!epNumber && link === seriesUrl) {
+        epNumber = 1;
+      }
+
+      if (!epNumber) return;
 
       eps.push({ link, epNumber });
     });
 
     if (!eps.length) return [];
 
-    // remove duplicates
-    eps = [...new Map(eps.map((e) => [e.link, e])).values()];
+    // =========================
+    // REMOVE DUPLICATES
+    // =========================
+    eps = [...new Map(eps.map((e) => [e.epNumber, e])).values()];
 
-    // sort properly
+    // =========================
+    // SORT PROPERLY
+    // =========================
     eps.sort((a, b) => a.epNumber - b.epNumber);
 
     return eps.map((e) => ({
@@ -121,6 +138,7 @@ async function getEpisodes(prefix, seriesUrl) {
         group: `${prefix}:${encodeURIComponent(seriesUrl)}`,
       },
     }));
+
   } catch (err) {
     console.error("khmerave meta error:", err.message);
     return [];
