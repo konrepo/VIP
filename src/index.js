@@ -309,7 +309,12 @@ builder.defineMetaHandler(async ({ id }) => {
       meta: {
         id,
         type: TYPE,
-        name: (first.title || "KhmerDub").replace(/episode\s*\d+/i, "").trim(),
+        name: (first.title || "KhmerDub")
+          .replace(/\[.*?\]/g, "")
+          .replace(/-\s*$/, "")
+		  .trim(),
+        description: (first.title || "KhmerDub")
+          .replace(/\[.*?\]/g, ""),		  
         poster: first.thumbnail,
         background: first.thumbnail,
         videos: episodes.map((ep, index) => ({
