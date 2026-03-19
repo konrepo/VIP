@@ -279,37 +279,34 @@ async function resolveOkEmbed(embedUrl) {
     .replace(/\\&quot;.*/g, ""); 
 }
 
-
 function buildStream(url, episode) {
   const isOk = /ok\.ru|okcdn\.ru/i.test(url);
   const isM3U8 = url.includes(".m3u8");
+
+  let headers = null;
+
+  if (isOk) {
+    headers = {
+      Referer: "https://ok.ru/",
+      Origin: "https://ok.ru"
+    };
+  } else if (url.includes("sooplive.co.kr")) {
+    headers = {
+      Referer: "https://www.sundaydrama.com/",
+      Origin: "https://www.sundaydrama.com"
+    };
+  }
 
   return {
     url,
     name: "KhmerDub",
     title: `Episode ${episode}`,
     type: isM3U8 ? "hls" : undefined,
-
     behaviorHints: {
       group: "khmerdub",
-
-      // ALWAYS send headers for HLS
-      ...(isM3U8 && {
+      ...(headers && {
         proxyHeaders: {
-          request: {
-            Referer: "https://www.sundaydrama.com/",
-            Origin: "https://www.sundaydrama.com"
-          }
-        }
-      }),
-
-      // keep OK special handling
-      ...(isOk && {
-        proxyHeaders: {
-          request: {
-            Referer: "https://ok.ru/",
-            Origin: "https://ok.ru"
-          }
+          request: headers
         }
       })
     }
@@ -320,30 +317,23 @@ function buildStream(url, episode) {
    STREAM
 ========================= */
 async function getStream(prefix, episodeUrl, episode) {
-	
+
   console.log("STREAM DEBUG:", {
     prefix,
     episode,
     episodeUrl
   });
-	
-  // Sunday fallback
+
+  // Sunday → already final URL (no fetch needed)
   if (prefix === "sunday") {
-    const { data } = await axiosClient.get(episodeUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        Referer: episodeUrl
-      }
-    });
+    const stream = buildStream(episodeUrl, episode);
 
-    const links = extractVideoLinks(data);
-    const url = links[episode - 1];
-    if (!url) return null;
+    console.log("FINAL STREAM OBJECT:", JSON.stringify(stream, null, 2));
 
-    return buildStream(url, episode);
+    return stream;
   }
 
-  // For VIP / iDrama: episodeUrl 
+  // Other sites
   let url = episodeUrl;
 
   // Resolve player.php
@@ -362,7 +352,11 @@ async function getStream(prefix, episodeUrl, episode) {
 
   console.log("FINAL STREAM URL:", url);
 
-  return buildStream(url, episode);
+  const stream = buildStream(url, episode);
+
+  console.log("FINAL STREAM OBJECT:", JSON.stringify(stream, null, 2));
+
+  return stream;
 }
 
 /* =========================
