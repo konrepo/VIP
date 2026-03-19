@@ -136,8 +136,10 @@ async function getStreamDetail(postId) {
 async function getEpisodes(prefix, seriesUrl) {
   const postId = await getPostId(seriesUrl);
 
+  // =========================
   // SundayDrama playlist
-  if (!postId && prefix === "sunday") {  
+  // =========================
+  if (!postId && prefix === "sunday") {
     const { data } = await axiosClient.get(seriesUrl);
 
     FILE_REGEX.lastIndex = 0;
@@ -149,11 +151,10 @@ async function getEpisodes(prefix, seriesUrl) {
       urls.push(match[1]);
     }
 
-    // Deduplicate + sort for stability
     const uniqueUrls = [...new Set(urls)];
     if (!uniqueUrls.length) return [];
 
-    const $ = cheerio.load(data);	
+    const $ = cheerio.load(data);
     const pagePoster =
       $("meta[property='og:image']").attr("content") ||
       $("link[rel='image_src']").attr("href") ||
@@ -180,59 +181,103 @@ async function getEpisodes(prefix, seriesUrl) {
     });
   }
 
-  if (!postId) {
-    return [];
-  }
+  // =========================
+  // No postId
+  // =========================
+  if (!postId) return [];
 
   const detail = await getStreamDetail(postId);
-  if (!detail) {
-    return [];
+  if (!detail) return [];
+
+  // =========================
+  // Get max episode
+  // =========================
+  let maxEp = POST_INFO.get(postId)?.maxEp || null;
+
+  console.log("MAX EP DEBUG:", {
+    postId,
+    stored: POST_INFO.get(postId),
+    maxEp
+  });
+
+  // fallback from title
+  if (!maxEp && detail?.title) {
+    const extracted = extractMaxEpFromTitle(detail.title);
+    if (extracted) {
+      maxEp = extracted;
+
+      POST_INFO.set(postId, {
+        ...(POST_INFO.get(postId) || {}),
+        maxEp
+      });
+    }
   }
 
-  const maxEp = POST_INFO.get(postId)?.maxEp || null;
-
-  // Deduplicate
-  let urls;
+  // =========================
+  // VIP / iDrama (dedupe)
+  // =========================
+  let episodes = [];
 
   if (prefix === "vip" || prefix === "idrama") {
-    // Blogger - keep original order
-    urls = [...new Set(detail.urls)];
-    // Limit by detected max episode
-    if (maxEp && urls.length > maxEp) {
-      urls = urls.slice(0, maxEp);
-    }	
-  } else {
-    // KhmerAve / others → need sorting
-    urls = [...new Set(detail.urls)].sort();
-  }
-	
-  // Apply max episode limit
-  if (maxEp && urls.length > maxEp) {
-    urls = urls.slice(0, maxEp);
+    const seen = new Set();
+
+    for (let i = 0; i < detail.urls.length; i++) {
+      const url = detail.urls[i];
+
+      const m = url.match(/-(\d+)(?:\D|$)/);
+      let ep = m ? parseInt(m[1], 10) : null;
+
+      // fallback if no episode number
+      if (!ep) {
+        ep = i + 1;
+      }
+
+      if (!seen.has(ep)) {
+        seen.add(ep);
+
+        episodes.push({
+          url,
+          ep
+        });
+      }
+    }
+
+    // sort properly
+    episodes.sort((a, b) => a.ep - b.ep);
+
+    // apply maxEp limit
+    if (maxEp && episodes.length > maxEp) {
+      episodes.splice(maxEp);
+    }
   }
 
-  return urls.map((url, index) => {
-    const m = url.match(/-(\d+)(?:\D|$)/);
-    const parsed = m ? parseInt(m[1], 10) : null;
-	  
-    const epNum =
-      Number.isInteger(parsed) && parsed > 0 && parsed <= (maxEp || 1000)
-        ? parsed
-        : index + 1;
-	  
-    return {
-      id: epNum,
+  // =========================
+  // KhmerAve / others
+  // =========================
+  else {
+    const urls = [...new Set(detail.urls)].sort();
+
+    episodes = urls.map((url, index) => ({
       url,
-      title: detail.title,
-      season: 1,
-      episode: epNum,
-      thumbnail: detail.thumbnail,
-      released: new Date().toISOString(),
-      behaviorHints: {
-        group: `${prefix}:${encodeURIComponent(seriesUrl)}`
-      }
-    };
-  }).slice(0, maxEp || urls.length);
+      ep: index + 1
+    }));
+  }
+
+  console.log("FINAL MAX EP:", maxEp);
+  console.log("FINAL EP COUNT:", episodes.length);
+
+  return episodes.map(({ url, ep }) => ({
+    id: ep,
+    url,
+    title: detail.title,
+    season: 1,
+    episode: ep,
+    thumbnail: detail.thumbnail,
+    released: new Date().toISOString(),
+    behaviorHints: {
+      group: `${prefix}:${encodeURIComponent(seriesUrl)}`
+    }
+  }));
 }
 
 /* =========================
