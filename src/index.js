@@ -131,10 +131,13 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
         : `${base}/?max-results=20&m=1`;
 
       const skip = Number(extra?.skip || 0);
-      const PAGE_STEP = 20;
+      const SKIP_STEP = 100;
+	  const PAGES_PER_SKIP = 5;
 
       // how many pages to skip
-      const steps = Math.floor(skip / PAGE_STEP);
+      const steps = 
+	    Math.floor(skip / SKIP_STEP) *
+		PAGES_PER_SKIP;
 
       console.log("SUNDAY DEBUG:", {
         skip,
