@@ -43,6 +43,12 @@ async function getPostId(url) {
   // Extract max EP from title OR from SundayDrama "episode/END.xx"
   const pageTitle = $("title").text();
   let maxEp = extractMaxEpFromTitle(pageTitle);
+  
+  console.log("TITLE DEBUG:", {
+    url,
+    pageTitle,
+    maxEp
+  });
 
   // SundayDrama often has: <b>episode/END.70</b>
   if (!maxEp) {
