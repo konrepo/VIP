@@ -130,26 +130,31 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
         ? `${base}/search?q=${encodeURIComponent(extra.search)}&max-results=20&m=1`
         : `${base}/?max-results=20&m=1`;
 
-      const WEBSITE_PAGE_SIZE = 20;
-      const PAGES_PER_BATCH = 2;
+      const WEBSITE_PAGE_SIZE = 100;
+      const PAGES_PER_BATCH = 5;
+      const SKIP_STEP = 100;
 
       const skip = Number(extra?.skip || 0);
-      const targetPage = Math.floor(skip / WEBSITE_PAGE_SIZE) + 1;
 
-      // DEBUG 
+      const startPage =
+        Math.floor(skip / SKIP_STEP) *
+          PAGES_PER_BATCH +
+        1;
+
       console.log("SUNDAY DEBUG:", {
+        id,
         skip,
-        targetPage
+        WEBSITE_PAGE_SIZE,
+        PAGES_PER_BATCH,
+        SKIP_STEP,
+        startPage
       });
 
-      // FIX overlap issue (page 2 only)
-      let adjustedPage = targetPage;
-      if (adjustedPage === 2) {
-        adjustedPage = 3;
-      }
+      let url = startPage === 1
+        ? startUrl
+        : `${base}/search?updated-max=&max-results=20&start=${startPage}`;
 
-      let url = startUrl;
-      let currentPage = 1;
+      let currentPage = startPage;
       let allItems = [];
 
       const headers = {
@@ -159,21 +164,25 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
         Accept: "text/html"
       };
 
-      // walk pages
-      while (currentPage < adjustedPage && url) {
-        const { data } = await axiosClient.get(url, { headers });
-        const $ = cheerio.load(data);
+      // walk forward until requested page
+      if (startPage > 1) {
+        url = startUrl;
+        currentPage = 1;
 
-        const older =
-          $("a.blog-pager-older-link").attr("href") ||
-          $("#Blog1_blog-pager-older-link").attr("href") ||
-          "";
+        while (currentPage < startPage && url) {
+          const { data } = await axiosClient.get(url, { headers });
+          const $ = cheerio.load(data);
 
-        url = older ? older : null;
-        currentPage++;
+          const older =
+            $("a.blog-pager-older-link").attr("href") ||
+            $("#Blog1_blog-pager-older-link").attr("href") ||
+            "";
+
+          url = older ? older : null;
+          currentPage++;
+        }
       }
 
-      // fetch batch
       for (let i = 0; i < PAGES_PER_BATCH && url; i++) {
         const { data } = await axiosClient.get(url, { headers });
         const $ = cheerio.load(data);
@@ -184,8 +193,10 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
           const $el = $(el);
 
           const aImg = $el.find("a.entry-image-wrap").first();
-          const link = aImg.attr("href") ||
-                       $el.find("h2.entry-title a").attr("href") || "";
+          const link =
+            aImg.attr("href") ||
+            $el.find("h2.entry-title a").attr("href") ||
+            "";
 
           const title =
             (aImg.attr("title") || "").trim() ||
@@ -196,7 +207,8 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
           const img =
             $el.find("img.entry-thumb").attr("src") ||
             aImg.find("span[data-src]").attr("data-src") ||
-            aImg.find("img").attr("src") || "";
+            aImg.find("img").attr("src") ||
+            "";
 
           allItems.push({
             id: link,
@@ -212,6 +224,21 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 
         url = older ? older : null;
       }
+
+      const uniq = uniqById(allItems);
+      const fixed = applyMetaId(uniq, id);
+
+      const result = {
+        metas: mapMetas(
+          fixed.slice(0, WEBSITE_PAGE_SIZE),
+          TYPE
+        ),
+        cacheMaxAge: 3600
+      };
+
+      CATALOG_CACHE.set(cacheKey, result);
+      return result;
+    }
 
       // dedupe + slice
       const uniq = uniqById(allItems);
