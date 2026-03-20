@@ -70,10 +70,10 @@ async function getEpisodes(prefix, seriesUrl) {
   try {
     const { data } = await axios.get(seriesUrl, {
       headers: { 
-        "User-Agent": prefix === "khmerave" ? UA_WIN : UA_MOB,
-        Referer: referer(prefix),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9"
+	    "User-Agent": prefix === "khmerave" ? UA_WIN : UA_MOB,
+		Referer: referer(prefix),
+		"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+		"Accept-Language": "en-US,en;q=0.9"
       },
       timeout: 15000,
     });
@@ -95,18 +95,15 @@ async function getEpisodes(prefix, seriesUrl) {
     // EPISODE EXTRACTION
     // =========================
     $("a[href]").each((_, el) => {
-      let link = $(el).attr("href");
+      const link = $(el).attr("href");
       if (!link) return;
 
       const cleanLink = link.replace(/\/$/, "");
       const cleanSeries = seriesUrl.replace(/\/$/, "");
 
-      // ONLY allow valid episode links
-      if (!cleanLink.includes("/videos/") && cleanLink !== cleanSeries) return;
-
       if (link.includes("?post_type=videos")) return;
 
-      // restrict to valid containers (prevents junk links)
+      // only allow links from the expected episode areas
       if (
         !$(el).closest("#latest-videos").length &&
         !$(el).closest(".col-xs-6.col-sm-6.col-md-3").length
@@ -114,13 +111,15 @@ async function getEpisodes(prefix, seriesUrl) {
 
       let epNumber = null;
 
-      // FIXED regex (supports -20-end)
-      const m = link.match(/-(\d+)(?:-|\/|$)/);
+      // exact KhmerAve video episode URL patterns:
+      // /videos/title-20/
+      // /videos/title-20-end/
+      const m = cleanLink.match(/\/videos\/[^/]+-(\d+)(?:-[^/]+)?$/i);
       if (m) {
         epNumber = parseInt(m[1], 10);
       }
 
-      // fallback for episode 1
+      // fallback for main series page = episode 1
       if (!epNumber && cleanLink === cleanSeries) {
         epNumber = 1;
       }
