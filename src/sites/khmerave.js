@@ -1,6 +1,5 @@
 const axios = require("axios");
 const cheerio = require("cheerio");
-const { extractEpisodeNumber } = require("../utils/helpers");
 
 const UA_WIN =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36";
@@ -32,6 +31,28 @@ function normalizeUrl(url = "") {
 
 function getSiteUA(prefix) {
   return prefix === "khmerave" ? UA_WIN : UA_MOB;
+}
+
+function extractEpisodeNumber(link, text, seriesUrl) {
+  const cleanLink = String(link || "").trim().replace(/\/$/, "");
+  const cleanSeries = String(seriesUrl || "").trim().replace(/\/$/, "");
+  const cleanText = String(text || "").replace(/\s+/g, " ").trim();
+
+  if (cleanLink === cleanSeries) return 1;
+
+  const textMatch = cleanText.match(/episode\s*0*([0-9]+)/i);
+  if (textMatch) return parseInt(textMatch[1], 10);
+
+  const dupSuffixMatch = cleanLink.match(/-(\d+)-\d+$/i);
+  if (dupSuffixMatch) return parseInt(dupSuffixMatch[1], 10);
+
+  const eSuffixMatch = cleanLink.match(/-(\d+)e-\d+$/i);
+  if (eSuffixMatch) return parseInt(eSuffixMatch[1], 10);
+
+  const genericMatch = cleanLink.match(/-(\d+)(?:-|\/|$)/i);
+  if (genericMatch) return parseInt(genericMatch[1], 10);
+
+  return null;
 }
 
 /* =========================
@@ -99,7 +120,6 @@ async function getEpisodes(prefix, seriesUrl) {
     const cleanSeries = normalizeUrl(seriesUrl);
     const episodeMap = new Map();
 
-    // Prefer KhmerAvenue episode table
     $("#latest-videos tbody tr").each((_, row) => {
       const a = $(row).find("a[href]").first();
       const link = (a.attr("href") || "").trim();
@@ -122,7 +142,6 @@ async function getEpisodes(prefix, seriesUrl) {
       }
     });
 
-    // Fallback if table missing/empty
     if (!episodeMap.size) {
       $("a[href]").each((_, el) => {
         const link = ($(el).attr("href") || "").trim();

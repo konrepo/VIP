@@ -90,35 +90,11 @@ function uniqById(items) {
   return [...new Map(items.map(item => [item.id, item])).values()];
 }
 
-//KhmerAve
-function extractEpisodeNumber(link, text, seriesUrl) {
-  const cleanLink = String(link || "").trim().replace(/\/$/, "");
-  const cleanSeries = String(seriesUrl || "").trim().replace(/\/$/, "");
-  const cleanText = String(text || "").replace(/\s+/g, " ").trim();
-
-  if (cleanLink === cleanSeries) return 1;
-
-  const textMatch = cleanText.match(/episode\s*0*([0-9]+)/i);
-  if (textMatch) return parseInt(textMatch[1], 10);
-
-  const dupSuffixMatch = cleanLink.match(/-(\d+)-\d+$/i);
-  if (dupSuffixMatch) return parseInt(dupSuffixMatch[1], 10);
-
-  const eSuffixMatch = cleanLink.match(/-(\d+)e-\d+$/i);
-  if (eSuffixMatch) return parseInt(eSuffixMatch[1], 10);
-
-  const genericMatch = cleanLink.match(/-(\d+)(?:-|\/|$)/i);
-  if (genericMatch) return parseInt(genericMatch[1], 10);
-
-  return null;
-}
-
 module.exports = {
   normalizePoster,
   extractVideoLinks,
   extractMaxEpFromTitle,
   extractOkIds,
   mapMetas,
-  uniqById,
-  extractEpisodeNumber
+  uniqById
 };
