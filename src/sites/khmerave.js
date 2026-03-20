@@ -110,6 +110,12 @@ async function getEpisodes(prefix, seriesUrl) {
 
     const $ = cheerio.load(data);
     const pageTitle = $("h1").first().text().trim() || seriesUrl;
+	
+    console.log("KHMERAVE PREFIX:", prefix);
+    console.log("KHMERAVE UA:", getSiteUA(prefix));
+    console.log("KHMERAVE TITLE:", pageTitle);
+    console.log("KHMERAVE ROWS:", $("#latest-videos tbody tr").length);
+    console.log("KHMERAVE ANCHORS:", $("a[href]").length);	
 
     let poster = "";
     const imgDiv = $(".album-content-image").first();
@@ -290,13 +296,18 @@ async function getStream(prefix, episodeUrl, episode) {
 
     const html = String(data || "");
     const candidate = tryExtractVideoCandidateFromKhmerAvenue(html);
+	
+	console.log("KHMERAVE STREAM URL:", episodeUrl);
+	console.log("KHMERAVE STREAM CANDIDATE:", candidate);
 
     if (!candidate) return null;
 
     const normalizedCandidate = normalizeOkUrl(candidate);
 
     if (/ok\.ru/.test(normalizedCandidate)) {
+	  console.log("KHMERAVE OK URL:", normalizedCandidate);	
       const direct = await resolveOkRuToDirect(normalizedCandidate, UA_MOB);
+	  console.log("KHMERAVE DIRECT:", direct);
       if (!direct) return null;
 
       return {
