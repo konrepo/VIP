@@ -109,7 +109,7 @@ async function getEpisodes(prefix, seriesUrl) {
       let epNumber = null;
 
       // normal episodes
-      const m = link.match(/-(\d+)(?:\/|$)/);
+      const m = link.match(/-(\d+)(?:-|\/|$)/);
       if (m) {
         epNumber = parseInt(m[1], 10);
       }
