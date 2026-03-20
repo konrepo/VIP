@@ -27,15 +27,24 @@ function encodeMetaId(prefix, url) {
 }
 
 function decodeMetaId(id) {
-  const idx = String(id || "").indexOf(":");
+  const raw = String(id || "");
+  const idx = raw.indexOf(":");
   if (idx === -1) return null;
 
-  const prefix = id.slice(0, idx);
-  const encoded = id.slice(idx + 1);
+  const prefix = raw.slice(0, idx);
+  const encoded = raw.slice(idx + 1);
+
+  // Reject old md5-style IDs from previous addon versions
+  if (/^[a-f0-9]{32}$/i.test(encoded)) {
+    return null;
+  }
 
   try {
     const url = Buffer.from(encoded, "base64url").toString("utf8").trim();
-    if (!url) return null;
+
+    if (!/^https?:\/\//i.test(url)) {
+      return null;
+    }
 
     return { prefix, url };
   } catch {
@@ -162,7 +171,6 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
         Referer: `${base}/`,
       };
 
-      // move forward to target page
       while (currentPage < targetPage && url) {
         const { data } = await axiosClient.get(url, { headers });
         const $ = cheerio.load(data);
@@ -176,7 +184,6 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
         currentPage++;
       }
 
-      // fetch multiple pages
       for (let i = 0; i < PAGES_PER_BATCH && url; i++) {
         const { data } = await axiosClient.get(url, { headers });
         const $ = cheerio.load(data);
@@ -297,7 +304,10 @@ builder.defineMetaHandler(async ({ id }) => {
 
     const decoded = decodeMetaId(id);
     if (!decoded) {
-      console.error("[META decode failed]", { id });
+      console.error("[META decode failed]", {
+        id,
+        reason: "Old cached ID or invalid encoded URL. Remove and re-add addon in Stremio.",
+      });
       return { meta: null };
     }
 
@@ -318,7 +328,6 @@ builder.defineMetaHandler(async ({ id }) => {
 
     if (!episodes.length) return { meta: null };
 
-    // normalize order
     if (
       episodes.length > 1 &&
       Number.isFinite(episodes[0]?.episode) &&
@@ -328,7 +337,6 @@ builder.defineMetaHandler(async ({ id }) => {
       episodes = episodes.reverse();
     }
 
-    // cache normalized episodes by meta id
     EP_CACHE.set(id, episodes);
 
     const first = episodes[0];
@@ -341,7 +349,8 @@ builder.defineMetaHandler(async ({ id }) => {
           .replace(/\[.*?\]/g, "")
           .replace(/-\s*$/, "")
           .trim(),
-        description: (first.title || "KhmerDub").replace(/\[.*?\]/g, ""),
+        description: (first.title || "KhmerDub")
+          .replace(/\[.*?\]/g, ""),
         poster: first.thumbnail,
         background: first.thumbnail,
         videos: episodes.map((ep) => ({
@@ -384,7 +393,11 @@ builder.defineStreamHandler(async ({ id }) => {
 
     const decoded = decodeMetaId(metaId);
     if (!decoded) {
-      console.error("[STREAM decode failed]", { id, metaId });
+      console.error("[STREAM decode failed]", {
+        id,
+        metaId,
+        reason: "Old cached ID or invalid encoded URL. Remove and re-add addon in Stremio.",
+      });
       return { streams: [] };
     }
 
@@ -395,7 +408,6 @@ builder.defineStreamHandler(async ({ id }) => {
 
     const { engine: siteEngine } = ctx;
 
-    // use cache first
     let episodes = EP_CACHE.get(metaId);
 
     if (!episodes) {
@@ -407,7 +419,6 @@ builder.defineStreamHandler(async ({ id }) => {
 
       if (!episodes.length) return { streams: [] };
 
-      // normalize
       if (
         episodes.length > 1 &&
         Number.isFinite(episodes[0]?.episode) &&
