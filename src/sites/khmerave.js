@@ -53,10 +53,12 @@ function extractEpisodeNumber(link, text, seriesUrl) {
   if (genericMatch) return parseInt(genericMatch[1], 10);
 
   const textMatch = cleanText.match(/episode\s*0*([0-9]+)/i);
-  if (textMatch) return parseInt(textMatch[1], 10);
+  if (textMatch) {
+    const num = parseInt(textMatch[1], 10);
+    return Number.isNaN(num) ? null : num;
+  }
 
   return null;
-}
 }
 
 /* =========================
