@@ -354,7 +354,7 @@ function buildStream(url, episode) {
 
   return {
     url,
-    name: "KhmerDub",
+    // name: "KhmerDub",
     title: `Episode ${episode}`,
     type: isM3U8 ? "hls" : undefined,
     behaviorHints: {
