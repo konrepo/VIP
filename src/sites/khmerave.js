@@ -70,10 +70,10 @@ async function getEpisodes(prefix, seriesUrl) {
   try {
     const { data } = await axios.get(seriesUrl, {
       headers: { 
-	    "User-Agent": prefix === "khmerave" ? UA_WIN : UA_MOB,
-		Referer: referer(prefix),
-		"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-		"Accept-Language": "en-US,en;q=0.9"
+        "User-Agent": prefix === "khmerave" ? UA_WIN : UA_MOB,
+        Referer: referer(prefix),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9"
       },
       timeout: 15000,
     });
@@ -106,9 +106,15 @@ async function getEpisodes(prefix, seriesUrl) {
 
       if (link.includes("?post_type=videos")) return;
 
+      // restrict to valid containers (prevents junk links)
+      if (
+        !$(el).closest("#latest-videos").length &&
+        !$(el).closest(".col-xs-6.col-sm-6.col-md-3").length
+      ) return;
+
       let epNumber = null;
 
-      // normal episodes
+      // FIXED regex (supports -20-end)
       const m = link.match(/-(\d+)(?:-|\/|$)/);
       if (m) {
         epNumber = parseInt(m[1], 10);
