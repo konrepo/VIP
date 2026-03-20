@@ -112,8 +112,6 @@ async function getEpisodes(prefix, seriesUrl) {
       let epNumber = null;
 
       // exact KhmerAve video episode URL patterns:
-      // /videos/title-20/
-      // /videos/title-20-end/
       const m = cleanLink.match(/\/videos\/[^/]+-(\d+)(?:-[^/]+)?$/i);
       if (m) {
         epNumber = parseInt(m[1], 10);
@@ -142,7 +140,7 @@ async function getEpisodes(prefix, seriesUrl) {
     eps.sort((a, b) => a.epNumber - b.epNumber);
 
     return eps.map((e) => ({
-      id: e.epNumber,
+      id: `${prefix}:${encodeURIComponent(e.link)}`,
       url: e.link,
       title: pageTitle,
       season: 1,
@@ -249,11 +247,22 @@ async function resolveOkRuToDirect(iframeUrl, ua) {
 ========================= */
 async function getStream(prefix, episodeUrl, episode) {
   try {
+    
+    const idx = episodeUrl.indexOf(":");
+    if (idx !== -1) {
+      episodeUrl = decodeURIComponent(episodeUrl.slice(idx + 1));
+    }
+
+    if (!episodeUrl.startsWith("http")) {
+      console.log("INVALID EPISODE URL:", episodeUrl);
+      return null;
+    }
+
     const epRes = await axios.get(episodeUrl, {
       headers: { 
-	    "User-Agent": prefix === "khmerave" ? UA_WIN : UA_MOB,
-	    Referer: referer(prefix),
-	  },
+        "User-Agent": prefix === "khmerave" ? UA_WIN : UA_MOB,
+        Referer: referer(prefix),
+      },
       timeout: 15000,
     });
 
