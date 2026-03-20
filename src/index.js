@@ -82,14 +82,12 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
     // KhmerAve / Merlkon: paging
     if (id === "khmerave" || id === "merlkon") {
       const WEBSITE_PAGE_SIZE = site.pageSize || 18;
-      const PAGES_PER_BATCH = 2;
-      const SKIP_STEP = 300;
+      const PAGES_PER_BATCH = 3;
 
       const skip = Number(extra?.skip || 0);
 
       const startPage =
-        Math.floor(skip / SKIP_STEP) *
-          PAGES_PER_BATCH +
+        Math.floor(skip / WEBSITE_PAGE_SIZE) +
         1;
 
       const base = String(site.baseUrl || "").replace(/\/$/, "");
@@ -111,45 +109,54 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 
       const fixed = applyMetaId(uniq, id);
 
-	  const result = {
-	     metas: mapMetas(
-		   fixed.slice(0, WEBSITE_PAGE_SIZE * PAGES_PER_BATCH),
-		   TYPE
-	     ),
-	     cacheMaxAge: 3600
-	  };
-	  CATALOG_CACHE.set(cacheKey, result);
-	  return result;
+      const offset =
+        skip -
+        (startPage - 1) * WEBSITE_PAGE_SIZE;
+
+      const result = {
+         metas: mapMetas(
+           fixed.slice(
+             offset,
+             offset + WEBSITE_PAGE_SIZE
+           ),
+           TYPE
+         ),
+         cacheMaxAge: 3600
+      };
+
+      CATALOG_CACHE.set(cacheKey, result);
+      return result;
     }
 	
     // SundayDrama (Blogger): search + paging
     if (id === "sunday") {
       const base = String(site.baseUrl || "").replace(/\/$/, "");
 
-      let url = extra?.search
-        ? `${base}/search?q=${encodeURIComponent(extra.search)}&max-results=20&m=1`
-        : `${base}/?max-results=20&m=1`;
+      const startUrl = extra?.search
+        ? `${base}/search?q=${encodeURIComponent(extra.search)}&max-results=20`
+        : `${base}/?max-results=20`;
+
+      const WEBSITE_PAGE_SIZE = 20;
+      const PAGES_PER_BATCH = 3;
 
       const skip = Number(extra?.skip || 0);
-      const SKIP_STEP = 100;
 
-      // how many pages to skip
-      const steps = Math.floor(skip / SKIP_STEP);
+      const targetPage =
+        Math.floor(skip / WEBSITE_PAGE_SIZE) +
+        1;
 
-      console.log("SUNDAY DEBUG:", {
-        skip,
-        steps
-      });
+      let url = startUrl;
+      let currentPage = 1;
+      let allItems = [];
 
       const headers = {
         "User-Agent":
-          "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36",
+          "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
         Referer: `${base}/`,
-        Accept: "text/html"
       };
 
-      // walk pages using "older" links
-      for (let i = 0; i < steps && url; i++) {
+      // move forward to target page
+      while (currentPage < targetPage && url) {
         const { data } = await axiosClient.get(url, { headers });
         const $ = cheerio.load(data);
 
@@ -159,12 +166,11 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
           "";
 
         url = older ? older : null;
+        currentPage++;
       }
 
-      // now fetch current page
-      let allItems = [];
-
-      if (url) {
+      // fetch multiple pages
+      for (let i = 0; i < PAGES_PER_BATCH && url; i++) {
         const { data } = await axiosClient.get(url, { headers });
         const $ = cheerio.load(data);
 
@@ -197,13 +203,33 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
             poster: normalizePoster(img),
           });
         }
+
+        const older =
+          $("a.blog-pager-older-link").attr("href") ||
+          $("#Blog1_blog-pager-older-link").attr("href") ||
+          "";
+
+        url = older ? older : null;
       }
+
+      if (!allItems.length) return { metas: [] };
 
       const uniq = uniqById(allItems);
       const fixed = applyMetaId(uniq, id);
 
+      const offset =
+        skip -
+        (targetPage - 1) * WEBSITE_PAGE_SIZE;
+
       const result = {
-        metas: mapMetas(fixed, TYPE)
+        metas: mapMetas(
+          fixed.slice(
+            offset,
+            offset + WEBSITE_PAGE_SIZE
+          ),
+          TYPE
+        ),
+        cacheMaxAge: 3600
       };
 
       CATALOG_CACHE.set(cacheKey, result);
@@ -212,31 +238,24 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 
     // VIP / iDrama: normal paging
     const WEBSITE_PAGE_SIZE = site.pageSize || 30;
-    const PAGES_PER_BATCH = 2;
-    const SKIP_STEP = 200;
+    const PAGES_PER_BATCH = 3;
 
     const skip = Number(extra?.skip || 0);
 
     const startPage =
-      Math.floor(skip / SKIP_STEP) *
-        PAGES_PER_BATCH +
+      Math.floor(skip / WEBSITE_PAGE_SIZE) +
       1;
-
-    console.log("CATALOG DEBUG:", {
-      id,
-      skip,
-      WEBSITE_PAGE_SIZE,
-      PAGES_PER_BATCH,
-      SKIP_STEP,
-      startPage
-    });
 
     const base = String(site.baseUrl || "").replace(/\/$/, "");
     const pages = [];
 
     for (let p = startPage; p < startPage + PAGES_PER_BATCH; p++) {
       const url =
-        p === 1 ? `${base}/` : `${base}/page/${p}/`;
+        extra?.search
+          ? `${base}/?s=${encodeURIComponent(extra.search)}&paged=${p}`
+          : p === 1
+            ? `${base}/`
+            : `${base}/page/${p}/`;
 
       pages.push(siteEngine.getCatalogItems(id, site, url));
     }
@@ -249,9 +268,16 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
     const uniq = uniqById(allItems);
     const fixed = applyMetaId(uniq, id);
 
+    const offset =
+      skip -
+      (startPage - 1) * WEBSITE_PAGE_SIZE;
+
     const result = {
       metas: mapMetas(
-        fixed.slice(0, WEBSITE_PAGE_SIZE * PAGES_PER_BATCH),
+        fixed.slice(
+          offset,
+          offset + WEBSITE_PAGE_SIZE
+        ),
         TYPE
       ),
       cacheMaxAge: 3600
