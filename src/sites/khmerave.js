@@ -40,19 +40,23 @@ function extractEpisodeNumber(link, text, seriesUrl) {
 
   if (cleanLink === cleanSeries) return 1;
 
-  const textMatch = cleanText.match(/episode\s*0*([0-9]+)/i);
-  if (textMatch) return parseInt(textMatch[1], 10);
-
   const dupSuffixMatch = cleanLink.match(/-(\d+)-\d+$/i);
   if (dupSuffixMatch) return parseInt(dupSuffixMatch[1], 10);
 
   const eSuffixMatch = cleanLink.match(/-(\d+)e-\d+$/i);
   if (eSuffixMatch) return parseInt(eSuffixMatch[1], 10);
 
+  const endSuffixMatch = cleanLink.match(/-(\d+)-end$/i);
+  if (endSuffixMatch) return parseInt(endSuffixMatch[1], 10);
+
   const genericMatch = cleanLink.match(/-(\d+)(?:-|\/|$)/i);
   if (genericMatch) return parseInt(genericMatch[1], 10);
 
+  const textMatch = cleanText.match(/episode\s*0*([0-9]+)/i);
+  if (textMatch) return parseInt(textMatch[1], 10);
+
   return null;
+}
 }
 
 /* =========================
@@ -149,7 +153,7 @@ async function getEpisodes(prefix, seriesUrl) {
         epNumber,
       });
 
-      if (!epNumber) return;
+      if (epNumber == null || Number.isNaN(epNumber) || epNumber < 1) return;
 
       if (!episodeMap.has(epNumber)) {
         episodeMap.set(epNumber, {
@@ -179,7 +183,7 @@ async function getEpisodes(prefix, seriesUrl) {
           epNumber,
         });
 
-        if (!epNumber) return;
+        if (epNumber == null || Number.isNaN(epNumber) || epNumber < 1) return;
 
         if (!episodeMap.has(epNumber)) {
           episodeMap.set(epNumber, {
