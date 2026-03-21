@@ -13,7 +13,7 @@ function referer(prefix) {
 }
 
 function cleanTitle(title) {
-  return String(title || "")
+  return (title || "")
     .replace(/&#8217;/g, "'")
     .replace(/&amp;/g, "&")
     .replace(/\s+/g, " ")
@@ -21,44 +21,8 @@ function cleanTitle(title) {
 }
 
 function posterFromStyle(style) {
-  const match = String(style || "").match(/url\((.*?)\)/i);
-  return match ? match[1].replace(/['"]/g, "") : "";
-}
-
-function normalizeUrl(url = "") {
-  return String(url).trim().replace(/\/$/, "");
-}
-
-function getSiteUA(prefix) {
-  return prefix === "khmerave" ? UA_WIN : UA_MOB;
-}
-
-function extractEpisodeNumber(link, text, seriesUrl) {
-  const cleanLink = String(link || "").trim().replace(/\/$/, "");
-  const cleanSeries = String(seriesUrl || "").trim().replace(/\/$/, "");
-  const cleanText = String(text || "").replace(/\s+/g, " ").trim();
-
-  if (cleanLink === cleanSeries) return 1;
-
-  const dupSuffixMatch = cleanLink.match(/-(\d+)-\d+$/i);
-  if (dupSuffixMatch) return parseInt(dupSuffixMatch[1], 10);
-
-  const eSuffixMatch = cleanLink.match(/-(\d+)e-\d+$/i);
-  if (eSuffixMatch) return parseInt(eSuffixMatch[1], 10);
-
-  const endSuffixMatch = cleanLink.match(/-(\d+)-end$/i);
-  if (endSuffixMatch) return parseInt(endSuffixMatch[1], 10);
-
-  const genericMatch = cleanLink.match(/-(\d+)(?:-|\/|$)/i);
-  if (genericMatch) return parseInt(genericMatch[1], 10);
-
-  const textMatch = cleanText.match(/episode\s*0*([0-9]+)/i);
-  if (textMatch) {
-    const num = parseInt(textMatch[1], 10);
-    return Number.isNaN(num) ? null : num;
-  }
-
-  return null;
+  const m = (style || "").match(/url\((.*?)\)/i);
+  return m ? m[1].replace(/['"]/g, "") : "";
 }
 
 /* =========================
@@ -67,10 +31,7 @@ function extractEpisodeNumber(link, text, seriesUrl) {
 async function getCatalogItems(prefix, siteConfig, url) {
   try {
     const { data } = await axios.get(url, {
-      headers: {
-        "User-Agent": UA_WIN,
-        Referer: referer(prefix),
-      },
+      headers: { "User-Agent": UA_WIN, Referer: referer(prefix) },
       timeout: 15000,
     });
 
@@ -80,21 +41,24 @@ async function getCatalogItems(prefix, siteConfig, url) {
     $(".card-content").each((_, el) => {
       const link = $(el).find("a").attr("href");
       const title = cleanTitle($(el).find("h3").first().text());
-      const style = $(el).find(".card-content-image").attr("style") || "";
+
+      const style =
+        $(el).find(".card-content-image").attr("style") || "";
+
       const poster = posterFromStyle(style);
 
-      if (!link || !title) return;
-
-      items.push({
-        id: link,
-        name: title,
-        poster,
-      });
+      if (link && title) {
+        items.push({
+          id: link, // raw URL (hashed later in index.js)
+          name: title,
+          poster,
+        });
+      }
     });
 
     return items;
   } catch (err) {
-    console.error(`[${prefix}] catalog error:`, err.message);
+    console.error("khmerave catalog error:", err.message);
     return [];
   }
 }
@@ -105,91 +69,88 @@ async function getCatalogItems(prefix, siteConfig, url) {
 async function getEpisodes(prefix, seriesUrl) {
   try {
     const { data } = await axios.get(seriesUrl, {
-      headers: {
-        "User-Agent": getSiteUA(prefix),
-        Referer: referer(prefix),
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
+      headers: { 
+	    "User-Agent": prefix === "khmerave" ? UA_WIN : UA_MOB,
+		Referer: referer(prefix),
+		"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+		"Accept-Language": "en-US,en;q=0.9"
       },
       timeout: 15000,
     });
 
     const $ = cheerio.load(data);
+
     const pageTitle = $("h1").first().text().trim() || seriesUrl;
 
+    // poster
     let poster = "";
-    const imgDiv = $(".album-content-image").first();
+    const imgDiv = $(".album-content-image");
     if (imgDiv.length) {
       poster = posterFromStyle(imgDiv.attr("style") || "");
     }
 
-    const cleanSeries = normalizeUrl(seriesUrl);
-    const episodeMap = new Map();
+    let eps = [];
 
-    $("#latest-videos tbody tr").each((_, row) => {
-      const a = $(row).find("a[href]").first();
-      const link = (a.attr("href") || "").trim();
-      const text = a.text();
-
+    // =========================
+    // EPISODE EXTRACTION
+    // =========================
+    $("a[href]").each((_, el) => {
+      let link = $(el).attr("href");
       if (!link) return;
 
-      const cleanLink = normalizeUrl(link);
+      const cleanLink = link.replace(/\/$/, "");
+      const cleanSeries = seriesUrl.replace(/\/$/, "");
+
+      // ONLY allow valid episode links
       if (!cleanLink.includes("/videos/") && cleanLink !== cleanSeries) return;
-      if (cleanLink.includes("?post_type=videos")) return;
 
-      const epNumber = extractEpisodeNumber(link, text, seriesUrl);
+      if (link.includes("?post_type=videos")) return;
 
-      if (epNumber == null || Number.isNaN(epNumber) || epNumber < 1) return;
+      let epNumber = null;
 
-      if (!episodeMap.has(epNumber)) {
-        episodeMap.set(epNumber, {
-          link,
-          epNumber,
-        });
+      // normal episodes
+      const m = link.match(/-(\d+)(?:\/|$)/);
+      if (m) {
+        epNumber = parseInt(m[1], 10);
       }
+
+      // fallback for episode 1
+      if (!epNumber && cleanLink === cleanSeries) {
+        epNumber = 1;
+      }
+
+      if (!epNumber) return;
+
+      eps.push({ link, epNumber });
     });
 
-    if (!episodeMap.size) {
+    if (!eps.length) return [];
 
-      $("a[href]").each((_, el) => {
-        const link = ($(el).attr("href") || "").trim();
-        const text = $(el).text();
+    // =========================
+    // REMOVE DUPLICATES
+    // =========================
+    eps = [...new Map(eps.map((e) => [e.epNumber, e])).values()];
 
-        if (!link) return;
+    // =========================
+    // SORT PROPERLY
+    // =========================
+    eps.sort((a, b) => a.epNumber - b.epNumber);
 
-        const cleanLink = normalizeUrl(link);
-        if (!cleanLink.includes("/videos/") && cleanLink !== cleanSeries) return;
-        if (cleanLink.includes("?post_type=videos")) return;
-
-        const epNumber = extractEpisodeNumber(link, text, seriesUrl);
-
-        if (epNumber == null || Number.isNaN(epNumber) || epNumber < 1) return;
-
-        if (!episodeMap.has(epNumber)) {
-          episodeMap.set(epNumber, {
-            link,
-            epNumber,
-          });
-        }
-      });
-    }
-
-    const episodes = [...episodeMap.values()].sort((a, b) => a.epNumber - b.epNumber);
-
-    return episodes.map((ep) => ({
-      id: ep.epNumber,
-      url: ep.link,
+    return eps.map((e) => ({
+      id: e.epNumber,
+      url: e.link,
       title: pageTitle,
       season: 1,
-      episode: ep.epNumber,
+      episode: e.epNumber,
       thumbnail: poster,
       released: new Date().toISOString(),
       behaviorHints: {
         group: `${prefix}:${encodeURIComponent(seriesUrl)}`,
       },
     }));
+
   } catch (err) {
-    console.error(`[${prefix}] meta error:`, err.message);
+    console.error("khmerave meta error:", err.message);
     return [];
   }
 }
@@ -200,27 +161,23 @@ async function getEpisodes(prefix, seriesUrl) {
 function normalizeOkUrl(url) {
   if (!url) return url;
 
-  let normalized = String(url).trim();
+  let u = url.trim();
 
-  if (normalized.startsWith("//")) {
-    normalized = `https:${normalized}`;
+  if (u.startsWith("//")) {
+    u = "https:" + u;
   }
 
-  return normalized.replace("m.ok.ru", "ok.ru");
+  return u.replace("m.ok.ru", "ok.ru");
 }
 
 function tryExtractVideoCandidateFromKhmerAvenue(html) {
-  const source = String(html || "");
-
-  const b64 = source.match(/Base64\.decode\("(.+?)"\)/i);
+  const b64 = html.match(/Base64\.decode\("(.+?)"\)/i);
   if (b64?.[1]) {
     try {
       const decoded = Buffer.from(b64[1], "base64").toString("utf8");
-      const iframeMatch = decoded.match(/<iframe[^>]+src=["']([^"']+)["']/i);
-      if (iframeMatch?.[1]) {
-        return iframeMatch[1];
-      }
-    } catch (_) {}
+      const iframe = decoded.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+      if (iframe?.[1]) return iframe[1];
+    } catch {}
   }
 
   const patterns = [
@@ -230,11 +187,9 @@ function tryExtractVideoCandidateFromKhmerAvenue(html) {
     /playlist:\s*["']([^"']+)["']/i,
   ];
 
-  for (const pattern of patterns) {
-    const match = source.match(pattern);
-    if (match?.[1]) {
-      return match[1];
-    }
+  for (const re of patterns) {
+    const m = html.match(re);
+    if (m?.[1]) return m[1];
   }
 
   return null;
@@ -244,7 +199,7 @@ async function resolveOkRuToDirect(iframeUrl, ua) {
   try {
     const okUrl = normalizeOkUrl(iframeUrl);
 
-    const { data } = await axios.get(okUrl, {
+    const okRes = await axios.get(okUrl, {
       headers: {
         "User-Agent": ua,
         Referer: "https://ok.ru/",
@@ -252,7 +207,7 @@ async function resolveOkRuToDirect(iframeUrl, ua) {
       timeout: 15000,
     });
 
-    let html = String(data || "");
+    let html = String(okRes.data || "");
 
     html = html
       .replace(/\\&quot;/g, '"')
@@ -268,10 +223,10 @@ async function resolveOkRuToDirect(iframeUrl, ua) {
       /"(https:[^"]+\.m3u8[^"]*)"/,
     ];
 
-    for (const pattern of patterns) {
-      const match = html.match(pattern);
-      if (match?.[1]) {
-        return match[1]
+    for (const re of patterns) {
+      const m = html.match(re);
+      if (m?.[1]) {
+        return m[1]
           .replace(/\\u0026/g, "&")
           .replace(/\\&/g, "&");
       }
@@ -289,25 +244,23 @@ async function resolveOkRuToDirect(iframeUrl, ua) {
 ========================= */
 async function getStream(prefix, episodeUrl, episode) {
   try {
-    const { data } = await axios.get(episodeUrl, {
-      headers: {
-        "User-Agent": getSiteUA(prefix),
-        Referer: referer(prefix),
-      },
+    const epRes = await axios.get(episodeUrl, {
+      headers: { 
+	    "User-Agent": prefix === "khmerave" ? UA_WIN : UA_MOB,
+	    Referer: referer(prefix),
+	  },
       timeout: 15000,
     });
 
-    const html = String(data || "");
-    const candidate = tryExtractVideoCandidateFromKhmerAvenue(html);
+    const html = String(epRes.data || "");
 
+    const candidate = tryExtractVideoCandidateFromKhmerAvenue(html);
     if (!candidate) return null;
 
-    const normalizedCandidate = normalizeOkUrl(candidate);
+    const cand = normalizeOkUrl(candidate);
 
-    if (/ok\.ru/.test(normalizedCandidate)) {
-
-      const direct = await resolveOkRuToDirect(normalizedCandidate, UA_MOB);
-
+    if (/ok\.ru/.test(cand)) {
+      const direct = await resolveOkRuToDirect(cand, UA_MOB);
       if (!direct) return null;
 
       return {
@@ -326,17 +279,16 @@ async function getStream(prefix, episodeUrl, episode) {
       };
     }
 
-    if (/\.(m3u8|mp4)(\?|$)/i.test(normalizedCandidate)) {
-
+    if (/\.(m3u8|mp4)(\?|$)/i.test(cand)) {
       return {
         title: `Episode ${String(episode).padStart(2, "0")}`,
-        url: normalizedCandidate,
+        url: cand,
       };
     }
 
     return null;
   } catch (err) {
-    console.error(`[${prefix}] stream error:`, err.message);
+    console.error("khmerave stream error:", err.message);
     return null;
   }
 }
