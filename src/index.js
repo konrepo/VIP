@@ -9,70 +9,41 @@ const axiosClient = require("./utils/fetch");
 const cheerio = require("cheerio");
 const { normalizePoster, mapMetas, uniqById } = require("./utils/helpers");
 
-const { EP_CACHE, CATALOG_CACHE } = require("./utils/cache");
+const { makeMetaId } = require("./utils/hash");
+const { URL_CACHE, EP_CACHE, CATALOG_CACHE } = require("./utils/cache");
+
+function applyMetaId(items, prefix) {
+  return items.map(item => {
+    const url = item.id || item.url;
+    if (typeof url !== "string" || !url.trim()) return null;
+
+    const metaId = makeMetaId(prefix, url);
+    URL_CACHE.set(metaId, url);
+
+    return {
+      ...item,
+      id: metaId
+    };
+  }).filter(Boolean);
+}
 
 const TYPE = "series";
 
 const ENGINES = {
   vip: engine,
-  sunday: engine,
+  sunday: engine,  
   idrama: engine,
   khmerave,
-  merlkon: khmerave,
+  merlkon: khmerave
 };
-
-function encodeMetaId(prefix, url) {
-  const encoded = Buffer.from(String(url).trim(), "utf8").toString("base64url");
-  return `${prefix}:${encoded}`;
-}
-
-function decodeMetaId(id) {
-  const raw = String(id || "");
-  const idx = raw.indexOf(":");
-  if (idx === -1) return null;
-
-  const prefix = raw.slice(0, idx);
-  const encoded = raw.slice(idx + 1);
-
-  // Reject old md5-style IDs from previous addon versions
-  if (/^[a-f0-9]{32}$/i.test(encoded)) {
-    return null;
-  }
-
-  try {
-    const url = Buffer.from(encoded, "base64url").toString("utf8").trim();
-
-    if (!/^https?:\/\//i.test(url)) {
-      return null;
-    }
-
-    return { prefix, url };
-  } catch {
-    return null;
-  }
-}
-
-function applyMetaId(items, prefix) {
-  return items
-    .map((item) => {
-      const url = item.id || item.url;
-      if (typeof url !== "string" || !url.trim()) return null;
-
-      return {
-        ...item,
-        id: encodeMetaId(prefix, url),
-      };
-    })
-    .filter(Boolean);
-}
 
 function getSiteEngine(id) {
   const site = sites[id];
-  const siteEngine = ENGINES[id];
+  const engine = ENGINES[id];
 
-  if (!site || !siteEngine) return null;
+  if (!site || !engine) return null;
 
-  return { site, engine: siteEngine };
+  return { site, engine };
 }
 
 const builder = new addonBuilder(manifest);
@@ -82,13 +53,11 @@ const builder = new addonBuilder(manifest);
 ========================= */
 builder.defineCatalogHandler(async ({ id, extra }) => {
   try {
-    console.log("[CATALOG REQUEST]", { id, extra });
-
-    const cacheKey = `catalog:${id}:${JSON.stringify(extra || {})}`;
+	const cacheKey = `catalog:${id}:${JSON.stringify(extra || {})}`;
     const cached = CATALOG_CACHE.get(cacheKey);
-    if (cached) return cached;
-
-    const ctx = getSiteEngine(id);
+    if (cached) return cached;  
+	
+	const ctx = getSiteEngine(id);
     if (!ctx) return { metas: [] };
 
     const { site, engine: siteEngine } = ctx;
@@ -97,12 +66,12 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
     if (extra?.search && (id === "khmerave" || id === "merlkon")) {
       const keyword = encodeURIComponent(extra.search);
 
-      const url =
-        id === "merlkon"
-          ? `https://www.khmerdrama.com/?s=${keyword}`
-          : `https://www.khmeravenue.com/?s=${keyword}`;
+      const url = id === "merlkon"
+        ? `https://www.khmerdrama.com/?s=${keyword}`
+        : `https://www.khmeravenue.com/?s=${keyword}`;
 
       const items = await siteEngine.getCatalogItems(id, site, url);
+
       const fixed = applyMetaId(items, id);
 
       const result = { metas: mapMetas(fixed, TYPE) };
@@ -114,14 +83,20 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
     if (id === "khmerave" || id === "merlkon") {
       const WEBSITE_PAGE_SIZE = site.pageSize || 18;
       const PAGES_PER_BATCH = 3;
+
       const skip = Number(extra?.skip || 0);
 
-      const startPage = Math.floor(skip / WEBSITE_PAGE_SIZE) + 1;
+      const startPage =
+        Math.floor(skip / WEBSITE_PAGE_SIZE) +
+        1;
+
       const base = String(site.baseUrl || "").replace(/\/$/, "");
       const pages = [];
 
       for (let p = startPage; p < startPage + PAGES_PER_BATCH; p++) {
-        const url = p === 1 ? `${base}/` : `${base}/page/${p}/`;
+        const url =
+          p === 1 ? `${base}/` : `${base}/page/${p}/`;
+
         pages.push(siteEngine.getCatalogItems(id, site, url));
       }
 
@@ -131,22 +106,28 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
       if (!allItems.length) return { metas: [] };
 
       const uniq = uniqById(allItems);
+
       const fixed = applyMetaId(uniq, id);
 
-      const offset = skip - (startPage - 1) * WEBSITE_PAGE_SIZE;
+      const offset =
+        skip -
+        (startPage - 1) * WEBSITE_PAGE_SIZE;
 
       const result = {
-        metas: mapMetas(
-          fixed.slice(offset, offset + WEBSITE_PAGE_SIZE),
-          TYPE
-        ),
-        cacheMaxAge: 3600,
+         metas: mapMetas(
+           fixed.slice(
+             offset,
+             offset + WEBSITE_PAGE_SIZE
+           ),
+           TYPE
+         ),
+         cacheMaxAge: 3600
       };
 
       CATALOG_CACHE.set(cacheKey, result);
       return result;
     }
-
+	
     // SundayDrama (Blogger): search + paging
     if (id === "sunday") {
       const base = String(site.baseUrl || "").replace(/\/$/, "");
@@ -157,9 +138,12 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 
       const WEBSITE_PAGE_SIZE = 20;
       const PAGES_PER_BATCH = 3;
+
       const skip = Number(extra?.skip || 0);
 
-      const targetPage = Math.floor(skip / WEBSITE_PAGE_SIZE) + 1;
+      const targetPage =
+        Math.floor(skip / WEBSITE_PAGE_SIZE) +
+        1;
 
       let url = startUrl;
       let currentPage = 1;
@@ -171,6 +155,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
         Referer: `${base}/`,
       };
 
+      // move forward to target page
       while (currentPage < targetPage && url) {
         const { data } = await axiosClient.get(url, { headers });
         const $ = cheerio.load(data);
@@ -180,10 +165,11 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
           $("#Blog1_blog-pager-older-link").attr("href") ||
           "";
 
-        url = older || null;
+        url = older ? older : null;
         currentPage++;
       }
 
+      // fetch multiple pages
       for (let i = 0; i < PAGES_PER_BATCH && url; i++) {
         const { data } = await axiosClient.get(url, { headers });
         const $ = cheerio.load(data);
@@ -223,7 +209,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
           $("#Blog1_blog-pager-older-link").attr("href") ||
           "";
 
-        url = older || null;
+        url = older ? older : null;
       }
 
       if (!allItems.length) return { metas: [] };
@@ -231,14 +217,19 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
       const uniq = uniqById(allItems);
       const fixed = applyMetaId(uniq, id);
 
-      const offset = skip - (targetPage - 1) * WEBSITE_PAGE_SIZE;
+      const offset =
+        skip -
+        (targetPage - 1) * WEBSITE_PAGE_SIZE;
 
       const result = {
         metas: mapMetas(
-          fixed.slice(offset, offset + WEBSITE_PAGE_SIZE),
+          fixed.slice(
+            offset,
+            offset + WEBSITE_PAGE_SIZE
+          ),
           TYPE
         ),
-        cacheMaxAge: 3600,
+        cacheMaxAge: 3600
       };
 
       CATALOG_CACHE.set(cacheKey, result);
@@ -248,18 +239,23 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
     // VIP / iDrama: normal paging
     const WEBSITE_PAGE_SIZE = site.pageSize || 30;
     const PAGES_PER_BATCH = 3;
+
     const skip = Number(extra?.skip || 0);
 
-    const startPage = Math.floor(skip / WEBSITE_PAGE_SIZE) + 1;
+    const startPage =
+      Math.floor(skip / WEBSITE_PAGE_SIZE) +
+      1;
+
     const base = String(site.baseUrl || "").replace(/\/$/, "");
     const pages = [];
 
     for (let p = startPage; p < startPage + PAGES_PER_BATCH; p++) {
-      const url = extra?.search
-        ? `${base}/?s=${encodeURIComponent(extra.search)}&paged=${p}`
-        : p === 1
-          ? `${base}/`
-          : `${base}/page/${p}/`;
+      const url =
+        extra?.search
+          ? `${base}/?s=${encodeURIComponent(extra.search)}&paged=${p}`
+          : p === 1
+            ? `${base}/`
+            : `${base}/page/${p}/`;
 
       pages.push(siteEngine.getCatalogItems(id, site, url));
     }
@@ -272,25 +268,26 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
     const uniq = uniqById(allItems);
     const fixed = applyMetaId(uniq, id);
 
-    const offset = skip - (startPage - 1) * WEBSITE_PAGE_SIZE;
+    const offset =
+      skip -
+      (startPage - 1) * WEBSITE_PAGE_SIZE;
 
     const result = {
       metas: mapMetas(
-        fixed.slice(offset, offset + WEBSITE_PAGE_SIZE),
+        fixed.slice(
+          offset,
+          offset + WEBSITE_PAGE_SIZE
+        ),
         TYPE
       ),
-      cacheMaxAge: 3600,
+      cacheMaxAge: 3600
     };
 
     CATALOG_CACHE.set(cacheKey, result);
     return result;
+
   } catch (e) {
-    console.error("[catalog error]", {
-      id,
-      extra,
-      message: e.message,
-      status: e.response?.status || null,
-    });
+    console.error("catalog error:", e);
     return { metas: [] };
   }
 });
@@ -300,23 +297,15 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 ========================= */
 builder.defineMetaHandler(async ({ id }) => {
   try {
-    console.log("[META REQUEST]", { id });
-
-    const decoded = decodeMetaId(id);
-    if (!decoded) {
-      console.error("[META decode failed]", {
-        id,
-        reason: "Old cached ID or invalid encoded URL. Remove and re-add addon in Stremio.",
-      });
-      return { meta: null };
-    }
-
-    const { prefix, url: seriesUrl } = decoded;
+    const prefix = id.split(":")[0];
 
     const ctx = getSiteEngine(prefix);
     if (!ctx) return { meta: null };
 
-    const { engine: siteEngine } = ctx;
+    const { site, engine: siteEngine } = ctx;
+
+    const seriesUrl = URL_CACHE.get(id);
+    if (!seriesUrl) return { meta: null };
 
     let episodes;
 
@@ -325,18 +314,19 @@ builder.defineMetaHandler(async ({ id }) => {
     } else {
       episodes = await siteEngine.getEpisodes(prefix, seriesUrl);
     }
-
     if (!episodes.length) return { meta: null };
 
+    // normalize order
     if (
-      episodes.length > 1 &&
-      Number.isFinite(episodes[0]?.episode) &&
-      Number.isFinite(episodes[episodes.length - 1]?.episode) &&
-      episodes[0].episode > episodes[episodes.length - 1].episode
-    ) {
+      episodes.length > 1 && 
+	  Number.isFinite(episodes[0]?.episode) &&
+	  Number.isFinite(episodes[episodes.length - 1]?.episode) &&
+	  episodes[0].episode > episodes[episodes.length - 1].episode
+	){
       episodes = episodes.reverse();
     }
 
+    // cache normalized episodes
     EP_CACHE.set(id, episodes);
 
     const first = episodes[0];
@@ -348,27 +338,23 @@ builder.defineMetaHandler(async ({ id }) => {
         name: (first.title || "KhmerDub")
           .replace(/\[.*?\]/g, "")
           .replace(/-\s*$/, "")
-          .trim(),
+		  .trim(),
         description: (first.title || "KhmerDub")
-          .replace(/\[.*?\]/g, ""),
+          .replace(/\[.*?\]/g, ""),		  
         poster: first.thumbnail,
         background: first.thumbnail,
-        videos: episodes.map((ep) => ({
+        videos: episodes.map((ep, index) => ({
           id: `${id}:${ep.episode}`,
           title: ep.title || `Episode ${ep.episode}`,
-          description: `Episode ${ep.episode}`,
+		  description: `Episode ${ep.episode}`,
           season: 1,
           episode: ep.episode,
-          thumbnail: ep.thumbnail,
+          thumbnail: ep.thumbnail
         })),
       },
     };
   } catch (err) {
-    console.error("[meta error]", {
-      id,
-      message: err.message,
-      status: err.response?.status || null,
-    });
+    console.error("meta error:", err);
     return { meta: null };
   }
 });
@@ -378,36 +364,31 @@ builder.defineMetaHandler(async ({ id }) => {
 ========================= */
 builder.defineStreamHandler(async ({ id }) => {
   try {
-    console.log("[STREAM REQUEST]", { id });
+    const parts = id.split(":");
+    if (parts.length < 2) return { streams: [] };
 
-    const lastColon = String(id || "").lastIndexOf(":");
-    if (lastColon === -1) return { streams: [] };
-
-    const metaId = id.slice(0, lastColon);
-    const episode = id.slice(lastColon + 1);
+    // Extract episode safely
+    const episode = parts.pop();
+    const metaId = parts.join(":");
 
     const epNum = Number(episode);
     if (!Number.isInteger(epNum) || epNum <= 0) {
       return { streams: [] };
     }
 
-    const decoded = decodeMetaId(metaId);
-    if (!decoded) {
-      console.error("[STREAM decode failed]", {
-        id,
-        metaId,
-        reason: "Old cached ID or invalid encoded URL. Remove and re-add addon in Stremio.",
-      });
-      return { streams: [] };
-    }
-
-    const { prefix, url: seriesUrl } = decoded;
+    const prefix = metaId.split(":")[0];
 
     const ctx = getSiteEngine(prefix);
     if (!ctx) return { streams: [] };
 
-    const { engine: siteEngine } = ctx;
+    const { site, engine: siteEngine } = ctx;
 
+    const seriesUrl = URL_CACHE.get(metaId);
+    if (!seriesUrl) return { streams: [] };
+
+    // =========================
+    // USE CACHE FIRST
+    // =========================
     let episodes = EP_CACHE.get(metaId);
 
     if (!episodes) {
@@ -419,24 +400,26 @@ builder.defineStreamHandler(async ({ id }) => {
 
       if (!episodes.length) return { streams: [] };
 
+      // normalize
       if (
-        episodes.length > 1 &&
+        episodes.length > 1 && 
         Number.isFinite(episodes[0]?.episode) &&
         Number.isFinite(episodes[episodes.length - 1]?.episode) &&
         episodes[0].episode > episodes[episodes.length - 1].episode
-      ) {
+      ){
         episodes = episodes.reverse();
       }
 
       EP_CACHE.set(metaId, episodes);
     }
 
-    let ep = episodes.find((e) => e.episode === epNum);
+    let ep = episodes.find(e => e.episode === epNum);
     if (!ep && epNum - 1 >= 0 && epNum - 1 < episodes.length) {
-      ep = episodes[epNum - 1];
+	  ep = episodes[epNum - 1];
     }
     if (!ep) return { streams: [] };
 
+    // Use episode URL directly
     let stream;
 
     if (prefix === "khmerave" || prefix === "merlkon") {
@@ -448,12 +431,9 @@ builder.defineStreamHandler(async ({ id }) => {
     if (!stream) return { streams: [] };
 
     return { streams: [stream] };
+
   } catch (err) {
-    console.error("[stream error]", {
-      id,
-      message: err.message,
-      status: err.response?.status || null,
-    });
+    console.error("stream error:", err);
     return { streams: [] };
   }
 });

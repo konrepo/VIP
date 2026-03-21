@@ -1,5 +1,5 @@
+const axios = require("axios");
 const cheerio = require("cheerio");
-const axiosClient = require("../utils/fetch");
 
 const UA_WIN =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36";
@@ -34,8 +34,8 @@ function getSiteUA(prefix) {
 }
 
 function extractEpisodeNumber(link, text, seriesUrl) {
-  const cleanLink = normalizeUrl(link);
-  const cleanSeries = normalizeUrl(seriesUrl);
+  const cleanLink = String(link || "").trim().replace(/\/$/, "");
+  const cleanSeries = String(seriesUrl || "").trim().replace(/\/$/, "");
   const cleanText = String(text || "").replace(/\s+/g, " ").trim();
 
   if (cleanLink === cleanSeries) return 1;
@@ -61,32 +61,17 @@ function extractEpisodeNumber(link, text, seriesUrl) {
   return null;
 }
 
-function buildHeaders(prefix, ua) {
-  return {
-    "User-Agent": ua,
-    Referer: referer(prefix),
-    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-  };
-}
-
-function logPreview(prefix, label, html) {
-  console.log(
-    `[${prefix}] ${label} PREVIEW:`,
-    String(html || "").replace(/\s+/g, " ").slice(0, 250)
-  );
-}
-
 /* =========================
    CATALOG
 ========================= */
 async function getCatalogItems(prefix, siteConfig, url) {
   try {
-    const { data } = await axiosClient.get(url, {
+    const { data } = await axios.get(url, {
       headers: {
         "User-Agent": UA_WIN,
         Referer: referer(prefix),
       },
+      timeout: 15000,
     });
 
     const $ = cheerio.load(data);
@@ -113,11 +98,7 @@ async function getCatalogItems(prefix, siteConfig, url) {
     console.log(`[${prefix}] CATALOG ITEMS:`, items.length);
     return items;
   } catch (err) {
-    console.error(`[${prefix}] catalog error:`, {
-      url,
-      message: err.message,
-      status: err.response?.status || null,
-    });
+    console.error(`[${prefix}] catalog error:`, err.message);
     return [];
   }
 }
@@ -127,14 +108,21 @@ async function getCatalogItems(prefix, siteConfig, url) {
 ========================= */
 async function getEpisodes(prefix, seriesUrl) {
   try {
-    const { data } = await axiosClient.get(seriesUrl, {
-      headers: buildHeaders(prefix, getSiteUA(prefix)),
+    const { data } = await axios.get(seriesUrl, {
+      headers: {
+        "User-Agent": getSiteUA(prefix),
+        Referer: referer(prefix),
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      timeout: 15000,
     });
 
     const $ = cheerio.load(data);
     const pageTitle = $("h1").first().text().trim() || seriesUrl;
 
     console.log(`[${prefix}] EP PREFIX:`, prefix);
+    console.log(`[${prefix}] EP UA:`, getSiteUA(prefix));
     console.log(`[${prefix}] EP URL:`, seriesUrl);
     console.log(`[${prefix}] EP TITLE:`, pageTitle);
     console.log(`[${prefix}] EP ROWS:`, $("#latest-videos tbody tr").length);
@@ -161,7 +149,6 @@ async function getEpisodes(prefix, seriesUrl) {
       if (cleanLink.includes("?post_type=videos")) return;
 
       const epNumber = extractEpisodeNumber(link, text, seriesUrl);
-
       console.log(`[${prefix}] ROW DEBUG:`, {
         link,
         text: text.trim(),
@@ -192,7 +179,6 @@ async function getEpisodes(prefix, seriesUrl) {
         if (cleanLink.includes("?post_type=videos")) return;
 
         const epNumber = extractEpisodeNumber(link, text, seriesUrl);
-
         console.log(`[${prefix}] FALLBACK ROW DEBUG:`, {
           link,
           text: text.trim(),
@@ -211,12 +197,6 @@ async function getEpisodes(prefix, seriesUrl) {
     }
 
     const episodes = [...episodeMap.values()].sort((a, b) => a.epNumber - b.epNumber);
-
-    if (!episodes.length) {
-      console.log(`[${prefix}] no episodes found`);
-      logPreview(prefix, "EPISODES MISS", data);
-      return [];
-    }
 
     console.log(
       `[${prefix}] FINAL EPISODES:`,
@@ -237,11 +217,7 @@ async function getEpisodes(prefix, seriesUrl) {
       },
     }));
   } catch (err) {
-    console.error(`[${prefix}] meta error:`, {
-      url: seriesUrl,
-      message: err.message,
-      status: err.response?.status || null,
-    });
+    console.error(`[${prefix}] meta error:`, err.message);
     return [];
   }
 }
@@ -272,9 +248,7 @@ function tryExtractVideoCandidateFromKhmerAvenue(html) {
       if (iframeMatch?.[1]) {
         return iframeMatch[1];
       }
-    } catch (err) {
-      console.error("[khmerave] base64 decode error:", err.message);
-    }
+    } catch (_) {}
   }
 
   const patterns = [
@@ -298,11 +272,12 @@ async function resolveOkRuToDirect(iframeUrl, ua) {
   try {
     const okUrl = normalizeOkUrl(iframeUrl);
 
-    const { data } = await axiosClient.get(okUrl, {
+    const { data } = await axios.get(okUrl, {
       headers: {
         "User-Agent": ua,
         Referer: "https://ok.ru/",
       },
+      timeout: 15000,
     });
 
     let html = String(data || "");
@@ -330,15 +305,9 @@ async function resolveOkRuToDirect(iframeUrl, ua) {
       }
     }
 
-    console.log("[khmerave] OK direct not found:", okUrl);
-    logPreview("khmerave", "OK MISS", html);
     return null;
   } catch (err) {
-    console.error("[khmerave] OK resolver error:", {
-      iframeUrl,
-      message: err.message,
-      status: err.response?.status || null,
-    });
+    console.error("OK resolver error:", err.message);
     return null;
   }
 }
@@ -348,11 +317,12 @@ async function resolveOkRuToDirect(iframeUrl, ua) {
 ========================= */
 async function getStream(prefix, episodeUrl, episode) {
   try {
-    const { data } = await axiosClient.get(episodeUrl, {
+    const { data } = await axios.get(episodeUrl, {
       headers: {
         "User-Agent": getSiteUA(prefix),
         Referer: referer(prefix),
       },
+      timeout: 15000,
     });
 
     const html = String(data || "");
@@ -361,15 +331,16 @@ async function getStream(prefix, episodeUrl, episode) {
     console.log(`[${prefix}] STREAM URL:`, episodeUrl);
     console.log(`[${prefix}] STREAM CANDIDATE:`, candidate);
 
-    if (!candidate) {
-      logPreview(prefix, "STREAM MISS", html);
-      return null;
-    }
+    if (!candidate) return null;
 
     const normalizedCandidate = normalizeOkUrl(candidate);
 
     if (/ok\.ru/.test(normalizedCandidate)) {
+      console.log(`[${prefix}] OK URL:`, normalizedCandidate);
+
       const direct = await resolveOkRuToDirect(normalizedCandidate, UA_MOB);
+      console.log(`[${prefix}] DIRECT:`, direct);
+
       if (!direct) return null;
 
       return {
@@ -389,6 +360,8 @@ async function getStream(prefix, episodeUrl, episode) {
     }
 
     if (/\.(m3u8|mp4)(\?|$)/i.test(normalizedCandidate)) {
+      console.log(`[${prefix}] DIRECT FILE URL:`, normalizedCandidate);
+
       return {
         title: `Episode ${String(episode).padStart(2, "0")}`,
         url: normalizedCandidate,
@@ -398,11 +371,7 @@ async function getStream(prefix, episodeUrl, episode) {
     console.log(`[${prefix}] STREAM NO MATCH FOR CANDIDATE:`, normalizedCandidate);
     return null;
   } catch (err) {
-    console.error(`[${prefix}] stream error:`, {
-      url: episodeUrl,
-      message: err.message,
-      status: err.response?.status || null,
-    });
+    console.error(`[${prefix}] stream error:`, err.message);
     return null;
   }
 }
