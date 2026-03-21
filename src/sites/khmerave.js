@@ -110,7 +110,15 @@ async function getEpisodes(prefix, seriesUrl) {
       let epNumber = null;
 
       if (cleanLink === cleanSeries) {
-        epNumber = 1;
+        const rootSlug = cleanSeries.split("/").filter(Boolean).pop() || "";
+        const rootTitle = pageTitle || "";
+        let rootMatch = rootSlug.match(/-(\d+)$/);
+
+        if (!rootMatch) {
+          rootMatch = rootTitle.match(/(\d+)\s*$/);
+        }
+
+        epNumber = rootMatch ? parseInt(rootMatch[1], 10) : 1;		
       } else {
         const slug = cleanLink.split("/").filter(Boolean).pop() || "";
 
