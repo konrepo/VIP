@@ -1,6 +1,6 @@
 {
   "name": "khmerdub-test",
-  "version": "1.2.0-test",
+  "version": "1.0.0-test",
   "description": "Stream Experimental Build | Dev: TheDevilz.",
   "main": "src/index.js",
   "type": "commonjs",
@@ -12,7 +12,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/konrepo/vip.git"
+    "url": "https://github.com/konrepo/VIP.git"
   },
   "license": "ISC",
   "dependencies": {
