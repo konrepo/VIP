@@ -101,14 +101,14 @@ async function getEpisodes(prefix, seriesUrl) {
       let link = $(el).attr("href");
       if (!link) return;
 
-      const cleanLink = link.replace(/\/$/, "");
+      const safeLink = link.split("#")[0].split("?")[0];
+      const cleanLink = safeLink.replace(/\/$/, "");
 
       if (!cleanLink.includes("/videos/") && cleanLink !== cleanSeries) return;
-      if (link.includes("?post_type=videos")) return;
+      if (safeLink.includes("?post_type=videos")) return;
 
       let epNumber = null;
 
-      // album root = episode 1
       if (cleanLink === cleanSeries) {
         epNumber = 1;
       } else {
@@ -119,14 +119,14 @@ async function getEpisodes(prefix, seriesUrl) {
           ""
         );
 
-        let m = rest.match(/^(\d+)/); 
+        let m = rest.match(/^(\d+)/);
         if (!m) m = slug.match(/-(\d+)[^-]*$/);
         if (m) epNumber = parseInt(m[1], 10);
       }
 
       if (!epNumber) return;
 
-      eps.push({ link, epNumber });
+      eps.push({ link: safeLink, epNumber });
     });
 
     if (!eps.length) return [];
