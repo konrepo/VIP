@@ -26,6 +26,40 @@ function posterFromStyle(style) {
 }
 
 /* =========================
+   EPISODE NUMBER HELPER
+========================= */
+function extractEpisodeNumber(link, text = "") {
+  if (!link) return 1;
+
+  if (link.includes("/album/")) return 1;
+
+  const slug = link
+    .split("?")[0]
+    .replace(/\/+$/, "")
+    .split("/")
+    .pop() || "";
+
+  let m;
+
+  m = slug.match(/-(\d+)-end$/i);
+  if (m) return parseInt(m[1], 10);
+
+  m = slug.match(/-(\d+)e(?:-\d+)?$/i);
+  if (m) return parseInt(m[1], 10);
+
+  m = slug.match(/-(\d+)-\d+$/i);
+  if (m) return parseInt(m[1], 10);
+
+  m = slug.match(/-(\d+)$/i);
+  if (m) return parseInt(m[1], 10);
+
+  m = String(text).match(/Episode\s*0*(\d+)/i);
+  if (m) return parseInt(m[1], 10);
+
+  return 1;
+}
+
+/* =========================
    CATALOG
 ========================= */
 async function getCatalogItems(prefix, siteConfig, url) {
@@ -92,12 +126,8 @@ async function getEpisodes(prefix, seriesUrl) {
         if (!link) return;
         if (link.includes("?post_type=videos")) return;
 
-        let epNumber = 1;
-        if (!link.includes("/album/")) {
-          const m = link.match(/-(\d+)\/?$/);
-          if (m) epNumber = parseInt(m[1], 10
-		  );
-        }
+        const text = $(el).text().trim();
+        const epNumber = extractEpisodeNumber(link, text);
 
         eps.push({ link, epNumber });
       }
@@ -248,11 +278,8 @@ async function getStream(prefix, seriesUrl, episode) {
         if (!link) return;
         if (link.includes("?post_type=videos")) return;
 
-        let epNumber = 1;
-        if (!link.includes("/album/")) {
-          const m = link.match(/-(\d+)/);
-          if (m) epNumber = parseInt(m[1], 10);
-        }
+        const text = $(el).text().trim();
+        const epNumber = extractEpisodeNumber(link, text);
 
         eps.push({ link, epNumber });
       }
