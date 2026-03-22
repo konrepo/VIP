@@ -303,7 +303,7 @@ async function getStream(prefix, seriesUrl, episode) {
       if (!direct) return null;
 
       return {
-        title: `Episode ${String(episode).padStart(2, "0")}`,,
+        title: `Episode ${String(episode).padStart(2, "0")}`,
         url: direct,
         behaviorHints: {
           notWebReady: true,
