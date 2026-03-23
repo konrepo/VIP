@@ -1,6 +1,15 @@
 function normalizePoster(url) {
-  if (!url) return "";
-  return url
+  if (!url || typeof url !== "string") return "";
+
+  let u = url.trim();
+
+  if (u.startsWith("//")) {
+    u = "https:" + u;
+  }
+
+  u = u.replace(/^http:/, "https:");
+
+  return u
     .replace(/\/s\d+\//, "/s0/")
     .replace(/=s\d+/, "=s0");
 }
@@ -19,8 +28,7 @@ const FILE_REGEX =
 
 function extractVideoLinks(text) {
   if (!text) return [];
-  const directMatches = text.match(DIRECT_REGEX) || [];
-  
+  const directMatches = text.match(DIRECT_REGEX) || [];  
   const okMatches = (text.match(OK_REGEX) || [])
     .map(u => u.replace("/video/", "/videoembed/"));
   const playerMatches = text.match(PLAYER_REGEX) || [];
@@ -38,16 +46,17 @@ function extractVideoLinks(text) {
     ...okMatches,
     ...playerMatches,
     ...fileMatches
-  ]));
+  ])).map(u => u.trim());
 }
 
 function extractMaxEpFromTitle(title) {
   if (!title) return null;
 
   const match =
-    title.match(/\bEP\.?\s*(\d+)\b/i) ||
-    title.match(/\bEpisode\s*(\d+)\b/i) ||
-    title.match(/\[EP\.?\s*(\d+)\]/i);
+    title.match(/\[(\d+)\s*END\]/i) ||  
+    title.match(/\[(\d+)\]/i) ||         
+    title.match(/\bEP\.?\s*-?\s*(\d+)\b/i) ||
+    title.match(/\bEpisode\s*-?\s*(\d+)\b/i);
 
   return match ? parseInt(match[1], 10) : null;
 }
@@ -72,7 +81,7 @@ function mapMetas(items, type = "series") {
     id: item.id,
     type,
     name: item.name,
-    poster: item.poster,
+    poster: item.poster || "",
     posterShape: "poster"
   }));
 }

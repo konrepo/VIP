@@ -6,7 +6,7 @@ const albumSite = {
   pageSize: 18
 };
 
-module.exports = {
+module.exports = Object.freeze({
   vip: {
     ...defaultSite,
     baseUrl: "https://phumikhmer.vip",
@@ -36,11 +36,11 @@ module.exports = {
 
   khmerave: {
     ...albumSite,
-    baseUrl: "https://www.khmeravenue.com/album/"
+    baseUrl: "https://www.khmeravenue.com/album"
   },
 
   merlkon: {
     ...albumSite,
-    baseUrl: "https://www.khmerdrama.com/album/"
+    baseUrl: "https://www.khmerdrama.com/album"
   }
-};
+});

@@ -18,15 +18,17 @@ module.exports = {
 
   resources: ["catalog", "meta", "stream"],
   types: [TYPE],
+  idPrefixes: sites.map(s => s.id),
 
-  catalogs: sites.map(site => ({
+  catalogs: sites.map((site) => ({
     type: TYPE,
     id: site.id,
     name: site.name,
-    extraSupported: EXTRA
+    extraSupported: EXTRA,
   })),
 
   behaviorHints: {
-    configurable: false
-  }
+    configurable: false,
+    adult: false,
+  },
 };

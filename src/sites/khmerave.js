@@ -26,40 +26,6 @@ function posterFromStyle(style) {
 }
 
 /* =========================
-   EPISODE NUMBER HELPER
-========================= */
-function extractEpisodeNumber(link, text = "") {
-  if (!link) return 1;
-
-  if (link.includes("/album/")) return 1;
-
-  const slug = link
-    .split("?")[0]
-    .replace(/\/+$/, "")
-    .split("/")
-    .pop() || "";
-
-  let m;
-
-  m = slug.match(/-(\d+)-end$/i);
-  if (m) return parseInt(m[1], 10);
-
-  m = slug.match(/-(\d+)e(?:-\d+)?$/i);
-  if (m) return parseInt(m[1], 10);
-
-  m = slug.match(/-(\d+)-\d+$/i);
-  if (m) return parseInt(m[1], 10);
-
-  m = slug.match(/-(\d+)$/i);
-  if (m) return parseInt(m[1], 10);
-
-  m = String(text).match(/Episode\s*0*(\d+)/i);
-  if (m) return parseInt(m[1], 10);
-
-  return 1;
-}
-
-/* =========================
    CATALOG
 ========================= */
 async function getCatalogItems(prefix, siteConfig, url) {
@@ -72,20 +38,18 @@ async function getCatalogItems(prefix, siteConfig, url) {
     const $ = cheerio.load(data);
     const items = [];
 
-    $("div.col-6.col-sm-4.thumbnail-container, div.card-content").each((_, el) => {
+    $(".card-content").each((_, el) => {
       const link = $(el).find("a").attr("href");
-      const title = cleanTitle($(el).find("h3").text());
+      const title = cleanTitle($(el).find("h3").first().text());
 
       const style =
-        $(el).find("div[style]").attr("style") ||
-        $(el).find(".card-content-image").attr("style") ||
-        "";
+        $(el).find(".card-content-image").attr("style") || "";
 
       const poster = posterFromStyle(style);
 
       if (link && title) {
         items.push({
-          id: `${prefix}:${encodeURIComponent(link)}`,
+          id: link, // raw URL (hashed later in index.js)
           name: title,
           poster,
         });
@@ -105,7 +69,12 @@ async function getCatalogItems(prefix, siteConfig, url) {
 async function getEpisodes(prefix, seriesUrl) {
   try {
     const { data } = await axios.get(seriesUrl, {
-      headers: { "User-Agent": UA_MOB, Referer: referer(prefix) },
+      headers: { 
+        "User-Agent": prefix === "khmerave" ? UA_WIN : UA_MOB,
+        Referer: referer(prefix),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9"
+      },
       timeout: 15000,
     });
 
@@ -120,32 +89,71 @@ async function getEpisodes(prefix, seriesUrl) {
     }
 
     let eps = [];
-    $("table#latest-videos a[href], div.col-xs-6.col-sm-6.col-md-3 a[href]").each(
-      (_, el) => {
-        const link = $(el).attr("href");
-        if (!link) return;
-        if (link.includes("?post_type=videos")) return;
 
-        const text = $(el).text().trim();
-        const epNumber = extractEpisodeNumber(link, text);
+    const cleanSeries = seriesUrl.replace(/\/$/, "");
+    const seriesSlug = cleanSeries.split("/").filter(Boolean).pop();
 
-        eps.push({ link, epNumber });
+    function escapeRegExp(str) {
+      return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    $("a[href]").each((_, el) => {
+      let link = $(el).attr("href");
+      if (!link) return;
+
+      const safeLink = link.split("#")[0].split("?")[0];
+      const cleanLink = safeLink.replace(/\/$/, "");
+
+      if (!cleanLink.includes("/videos/") && cleanLink !== cleanSeries) return;
+      if (safeLink.includes("?post_type=videos")) return;
+
+      let epNumber = null;
+
+      if (cleanLink === cleanSeries) {
+        const linkText = $(el).text().replace(/\s+/g, " ").trim();
+        const m = linkText.match(/episode\s*(\d+)/i);
+
+        if (m) {
+          epNumber = parseInt(m[1], 10);
+        } else {
+          epNumber = 1;
+        }
+      } else {
+        const slug = cleanLink.split("/").filter(Boolean).pop() || "";
+
+        let rest = slug.replace(
+          new RegExp("^" + escapeRegExp(seriesSlug) + "-?", "i"),
+          ""
+        );
+
+        let m = rest.match(/^(\d+)/);
+        if (!m) m = slug.match(/-(\d+)[^-]*$/);
+        if (m) epNumber = parseInt(m[1], 10);
       }
-    );
+
+      if (!epNumber) return;
+
+      eps.push({ link: safeLink, epNumber });
+    });
 
     if (!eps.length) return [];
 
-    eps = [...new Map(eps.map((e) => [e.link, e])).values()];
+    eps = [...new Map(eps.map((e) => [e.epNumber, e])).values()];
     eps.sort((a, b) => a.epNumber - b.epNumber);
 
     return eps.map((e) => ({
-      id: `${prefix}:${encodeURIComponent(seriesUrl)}:1:${e.epNumber}`,
+      id: e.epNumber,
+      url: e.link,
       title: pageTitle,
       season: 1,
       episode: e.epNumber,
       thumbnail: poster,
       released: new Date().toISOString(),
+      behaviorHints: {
+        group: `${prefix}:${encodeURIComponent(seriesUrl)}`,
+      },
     }));
+
   } catch (err) {
     console.error("khmerave meta error:", err.message);
     return [];
@@ -153,7 +161,7 @@ async function getEpisodes(prefix, seriesUrl) {
 }
 
 /* =========================
-   STREAM
+   STREAM HELPERS
 ========================= */
 function normalizeOkUrl(url) {
   if (!url) return url;
@@ -164,14 +172,10 @@ function normalizeOkUrl(url) {
     u = "https:" + u;
   }
 
-  // Important: convert mobile domain
-  u = u.replace("m.ok.ru", "ok.ru");
-
-  return u;
+  return u.replace("m.ok.ru", "ok.ru");
 }
 
 function tryExtractVideoCandidateFromKhmerAvenue(html) {
-  // Base64 decode case
   const b64 = html.match(/Base64\.decode\("(.+?)"\)/i);
   if (b64?.[1]) {
     try {
@@ -181,12 +185,11 @@ function tryExtractVideoCandidateFromKhmerAvenue(html) {
     } catch {}
   }
 
-  // Standard patterns (covers options.player_list file:)
   const patterns = [
     /['"]?file['"]?\s*:\s*['"]([^'"]+)['"]/i,
     /<iframe[^>]*src=["']([^"']+)["']/i,
     /<source[^>]*src=["']([^"']+)["']/i,
-    /playlist:\s*["']([^"']+)["']/i
+    /playlist:\s*["']([^"']+)["']/i,
   ];
 
   for (const re of patterns) {
@@ -204,17 +207,13 @@ async function resolveOkRuToDirect(iframeUrl, ua) {
     const okRes = await axios.get(okUrl, {
       headers: {
         "User-Agent": ua,
-        "Referer": "https://ok.ru/"
+        Referer: "https://ok.ru/",
       },
-      timeout: 15000
+      timeout: 15000,
     });
 
-    let html = okRes.data;
-    if (typeof html !== "string") {
-      html = String(html);
-    }
+    let html = String(okRes.data || "");
 
-    // Decode escaped content
     html = html
       .replace(/\\&quot;/g, '"')
       .replace(/&quot;/g, '"')
@@ -222,83 +221,50 @@ async function resolveOkRuToDirect(iframeUrl, ua) {
       .replace(/\\&/g, "&")
       .replace(/\\\//g, "/");
 
-    let match = null;
-
     const patterns = [
       /"ondemandHls"\s*:\s*"([^"]+)/,
       /"hlsMasterPlaylistUrl"\s*:\s*"([^"]+)/,
       /"hlsManifestUrl"\s*:\s*"([^"]+)/,
-      /"metadataUrl"\s*:\s*"(https:[^"]+\.m3u8[^"]*)"/,
-      /"(https:[^"]+\.m3u8[^"]*)"/
+      /"(https:[^"]+\.m3u8[^"]*)"/,
     ];
 
     for (const re of patterns) {
       const m = html.match(re);
-      if (m && m[1]) {
-        match = m;
-        break;
+      if (m?.[1]) {
+        return m[1]
+          .replace(/\\u0026/g, "&")
+          .replace(/\\&/g, "&");
       }
     }
 
-    if (!match || !match[1]) {
-      return null;
-    }
-
-    const cleanUrl = match[1]
-      .replace(/\\u0026/g, "&")
-      .replace(/\\&/g, "&");
-
-    return cleanUrl;
-
+    return null;
   } catch (err) {
-    console.error("OK resolver error:", err.response?.status || err.message);
+    console.error("OK resolver error:", err.message);
     return null;
   }
 }
 
-async function getStream(prefix, seriesUrl, episode) {
+/* =========================
+   STREAM
+========================= */
+async function getStream(prefix, episodeUrl, episode) {
   try {
-    // Re-scrape series page to find episode link
-    const { data } = await axios.get(seriesUrl, {
-      headers: { "User-Agent": UA_MOB, Referer: referer(prefix) },
+    const epRes = await axios.get(episodeUrl, {
+      headers: { 
+	    "User-Agent": prefix === "khmerave" ? UA_WIN : UA_MOB,
+	    Referer: referer(prefix),
+	  },
       timeout: 15000,
     });
 
-    const $ = cheerio.load(data);
+    const html = String(epRes.data || "");
 
-    let eps = [];
-    $("table#latest-videos a[href], div.col-xs-6.col-sm-6.col-md-3 a[href]").each(
-      (_, el) => {
-        const link = $(el).attr("href");
-        if (!link) return;
-        if (link.includes("?post_type=videos")) return;
-
-        const text = $(el).text().trim();
-        const epNumber = extractEpisodeNumber(link, text);
-
-        eps.push({ link, epNumber });
-      }
-    );
-
-    eps = [...new Map(eps.map((e) => [e.link, e])).values()];
-    eps.sort((a, b) => a.epNumber - b.epNumber);
-
-    const target = eps.find((e) => e.epNumber === episode);
-    if (!target) return null;
-
-    const epUrl = target.link;
-
-    const epRes = await axios.get(epUrl, {
-      headers: { "User-Agent": UA_MOB, Referer: referer(prefix) },
-      timeout: 15000,
-    });
-
-    const candidate = tryExtractVideoCandidateFromKhmerAvenue(String(epRes.data || ""));
+    const candidate = tryExtractVideoCandidateFromKhmerAvenue(html);
     if (!candidate) return null;
 
     const cand = normalizeOkUrl(candidate);
 
-    if (cand.includes("ok.ru")) {
+    if (/ok\.ru/.test(cand)) {
       const direct = await resolveOkRuToDirect(cand, UA_MOB);
       if (!direct) return null;
 
@@ -306,9 +272,13 @@ async function getStream(prefix, seriesUrl, episode) {
         title: `Episode ${String(episode).padStart(2, "0")}`,
         url: direct,
         behaviorHints: {
+          group: `${prefix}:${encodeURIComponent(episodeUrl)}`,
           notWebReady: true,
           proxyHeaders: {
-            request: { Referer: "https://ok.ru/", "User-Agent": UA_MOB },
+            request: {
+              Referer: "https://ok.ru/",
+              "User-Agent": UA_MOB,
+            },
           },
         },
       };
