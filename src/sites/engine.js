@@ -420,23 +420,39 @@ async function getCatalogItems(prefix, siteConfig, url) {
 
         for (const el of articles) {
           const $el = $$(el);
-          const a = $el.find(siteConfig.titleSelector).first();
+          const $titleEl = $el.find(siteConfig.titleSelector).first();
+		  const $posterEl = $el.find(siteConfig.posterSelector).first();
 
           const title =
-            a.attr("title")?.trim() ||
-            a.text().trim();
+            $titleEl.text().trim() ||
+            $titleEl.attr("title")?.trim() ||
+            $posterEl.attr("title")?.trim() ||
+            $posterEl.attr("alt")?.trim() ||
+            $el.find("img").first().attr("alt")?.trim() ||
+            "";
 
           const link = a.attr("href");
+            $titleEl.attr("href") ||
+            $posterEl.attr("href") ||
+            $posterEl.closest("a").attr("href") ||
+            $el.find("a").first().attr("href") ||
+            "";
+		  
           if (!title || !link) continue;
 
           let poster = "";
-          const posterEl = $el.find(siteConfig.posterSelector).first();
-          for (const attr of siteConfig.posterAttrs) {
-            poster = posterEl.attr(attr) || poster;
+          for (const attr of siteConfig.posterAttrs || []) {
+            poster = $posterEl.attr(attr) || poster;
             if (poster) break;
           }
 
-          const normalizedPoster = normalizePoster(poster);
+          if (!poster) {
+          const $img = $el.find("img").first();
+            for (const attr of ["data-src", "data-lazy-src", "src"]) {
+              poster = $img.attr(attr) || poster;
+              if (poster) break;
+            }
+          }
 
           allItems.push({
             id: link,
@@ -459,31 +475,52 @@ async function getCatalogItems(prefix, siteConfig, url) {
 
     const results = articles.map((el) => {
       const $el = $(el);
-      const a = $el.find(siteConfig.titleSelector).first();
+	  
+      const $titleEl = $el.find(siteConfig.titleSelector).first();
+	  const $posterEl = $el.find(siteConfig.posterSelector).first();
 
-      const title = a.text().trim();
-      const link = a.attr("href");
+      const title =
+      $titleEl.text().trim() ||
+        $titleEl.attr("title")?.trim() ||
+        $posterEl.attr("title")?.trim() ||
+        $posterEl.attr("alt")?.trim() ||
+        $el.find("img").first().attr("alt")?.trim() ||
+        "";
+
+      const link =
+        $titleEl.attr("href") ||
+        $posterEl.attr("href") ||
+        $posterEl.closest("a").attr("href") ||
+        $el.find("a").first().attr("href") ||
+        "";
+	  
       if (!title || !link) return null;
 
       let poster = "";
-      const posterEl = $el.find(siteConfig.posterSelector).first();
-      for (const attr of siteConfig.posterAttrs) {
-        poster = posterEl.attr(attr) || poster;
+      for (const attr of siteConfig.posterAttrs || []) {
+        poster = $posterEl.attr(attr) || poster;
         if (poster) break;
       }
 
-      const normalizedPoster = normalizePoster(poster);
+      if (!poster) {
+        const $img = $el.find("img").first();
+        for (const attr of ["data-src", "data-lazy-src", "src"]) {
+          poster = $img.attr(attr) || poster;
+          if (poster) break;
+        }
+      }
 
       return {
-        id: link,
+        id: link.trim(),
         name: title,
-        poster: normalizedPoster,
+        poster: normalizePoster(poster),
       };
     });
 
-    return results.filter(Boolean);
+    return uniqById(results.filter(Boolean));
 
-  } catch {
+  } catch (err) {
+	console.error("getCatalogItems error:", prefix, url, err.message);  
     return [];
   }
 }
