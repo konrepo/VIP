@@ -7,7 +7,7 @@ async function resolvePlayerUrl(playerUrl) {
   try {
     const { data } = await axiosClient.get(playerUrl);
 
-    const html = String(data)
+    const html = data
       .replace(/\\\//g, "/")
       .replace(/&amp;/g, "&");
 
@@ -29,8 +29,7 @@ async function resolveOkEmbed(embedUrl) {
     const { data } = await axiosClient.get(embedUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0",
-        Referer: "https://ok.ru/",
-        Origin: "https://ok.ru"
+        Referer: "https://ok.ru/"
       }
     });
 
@@ -38,7 +37,9 @@ async function resolveOkEmbed(embedUrl) {
       data.match(/\\&quot;ondemandHls\\&quot;:\\&quot;(https:\/\/[^"]+?\.m3u8)/) ||
       data.match(/&quot;ondemandHls&quot;:&quot;(https:\/\/[^"]+?\.m3u8)/);
 
-    if (!hlsMatch) return null;
+    if (!hlsMatch) {
+      return null;
+    }
 
     return hlsMatch[1]
       .replace(/\\u0026/g, "&")
@@ -55,13 +56,12 @@ async function resolveOkEmbed(embedUrl) {
 ========================= */
 function buildStream(url, episode, title, name = "KhmerDub", group = "khmerdub") {
   const isOk = /ok\.ru|okcdn\.ru/i.test(url);
-  const isHls = /\.m3u8($|\?)/i.test(url);
 
   return {
     url,
     name,
     title: title || `Episode ${episode}`,
-    type: isHls ? "hls" : undefined,
+    type: url.includes(".m3u8") ? "hls" : undefined,
     behaviorHints: isOk
       ? {
           group,
@@ -72,9 +72,7 @@ function buildStream(url, episode, title, name = "KhmerDub", group = "khmerdub")
             }
           }
         }
-      : {
-          group
-        }
+      : { group }
   };
 }
 
