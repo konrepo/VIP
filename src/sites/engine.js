@@ -89,6 +89,14 @@ async function fetchFromBlog(blogId, postId) {
 
     const title = data.entry.title.$t;
     const content = data.entry.content?.$t || "";
+	
+	console.log("========== BLOG DEBUG ==========");
+	console.log("POST ID:", postId);
+	console.log("TITLE:", title);
+	console.log("DIRECT URLS:", extractVideoLinks(content));
+	console.log("TOKENS:", extractEmbedTokens(content));
+	console.log("================================");
+	
     const $content = cheerio.load(content);
 
     let thumbnail =
