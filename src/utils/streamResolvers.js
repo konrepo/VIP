@@ -25,26 +25,30 @@ async function resolvePlayerUrl(playerUrl) {
    RESOLVE OK
 ========================= */
 async function resolveOkEmbed(embedUrl) {
-  const { data } = await axiosClient.get(embedUrl, {
-    headers: {
-      "User-Agent": "Mozilla/5.0",
-      Referer: "https://ok.ru/"
+  try {
+    const { data } = await axiosClient.get(embedUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        Referer: "https://ok.ru/"
+      }
+    });
+
+    const hlsMatch =
+      data.match(/\\&quot;ondemandHls\\&quot;:\\&quot;(https:\/\/[^"]+?\.m3u8)/) ||
+      data.match(/&quot;ondemandHls&quot;:&quot;(https:\/\/[^"]+?\.m3u8)/);
+
+    if (!hlsMatch) {
+      return null;
     }
-  });
 
-  const hlsMatch =
-    data.match(/\\&quot;ondemandHls\\&quot;:\\&quot;(https:\/\/[^"]+?\.m3u8)/) ||
-    data.match(/&quot;ondemandHls&quot;:&quot;(https:\/\/[^"]+?\.m3u8)/);
-
-  if (!hlsMatch) {
+    return hlsMatch[1]
+      .replace(/\\u0026/g, "&")
+      .replace(/\\\//g, "/")
+      .replace(/&amp;/g, "&")
+      .replace(/\\&quot;.*/g, "");
+  } catch {
     return null;
   }
-
-  return hlsMatch[1]
-    .replace(/\\u0026/g, "&")
-    .replace(/\\\//g, "/")
-    .replace(/&amp;/g, "&")
-    .replace(/\\&quot;.*/g, "");
 }
 
 /* =========================
