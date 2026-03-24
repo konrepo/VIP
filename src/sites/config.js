@@ -45,8 +45,7 @@ module.exports = {
   },
   
   phumi2: {
-	...defaultSite,  
-	pageSize: 30,
+	pageSize: 12, 
     baseUrl: "https://www.phumikhmer1.club/"
   }  
 };

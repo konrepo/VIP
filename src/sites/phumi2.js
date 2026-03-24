@@ -263,28 +263,59 @@ async function getStreamDetail(postId) {
 ========================= */
 async function getCatalogItems(prefix, siteConfig, url) {
   try {
-    const allItems = [];
-    let currentUrl = url;
-    let pagesToLoad = 3;
+    const { data } = await axiosClient.get(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
+        Referer: siteConfig.baseUrl || url
+      }
+    });
 
-    while (currentUrl && pagesToLoad > 0) {
-      const { data } = await axiosClient.get(currentUrl, {
-        headers: {
-          ...PAGE_HEADERS,
-          Referer: siteConfig.baseUrl || currentUrl
-        }
-      });
+    const $ = cheerio.load(data);
+    const posts = $("div.blog-posts div.grid-posts article.blog-post").toArray();
 
-      const $ = cheerio.load(data);
-      const pageItems = extractGridItems($, prefix, currentUrl);
+    const results = posts.map((post) => {
+      const $el = $(post);
 
-      allItems.push(...pageItems);
+      const a =
+        $el.find("div.post-filter-image a.post-filter-link").first().length
+          ? $el.find("div.post-filter-image a.post-filter-link").first()
+          : $el.find("h2.entry-title a").first();
 
-      currentUrl = extractOlderLink($, currentUrl);
-      pagesToLoad -= 1;
-    }
+      const titleEl = $el.find("h2.entry-title").first();
+      const imgEl = $el.find("img.snip-thumbnail").first();
 
-    return uniqById(allItems);
+      const title =
+        (a.attr("title") || "").trim() ||
+        titleEl.text().trim() ||
+        a.text().trim();
+
+      const link = a.attr("href");
+      if (!title || !link) return null;
+
+      let poster =
+        imgEl.attr("data-src") ||
+        imgEl.attr("src") ||
+        a.find("img").attr("data-src") ||
+        a.find("img").attr("src") ||
+        "";
+
+      poster = normalizePoster(
+        poster
+          .replace(/\/w\d+-h\d+[^/]*\//gi, "/s0/")
+          .replace(/\/s\d+(-c)?\//gi, "/s0/")
+          .replace(/=w\d+-h\d+[^&]*/gi, "=s0")
+          .replace(/=s\d+(-c)?/gi, "=s0")
+      );
+
+      return {
+        id: `${prefix}:${encodeURIComponent(link)}`,
+        name: title,
+        poster
+      };
+    });
+
+    return uniqById(results.filter(Boolean));
   } catch {
     return [];
   }
