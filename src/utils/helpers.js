@@ -93,6 +93,5 @@ module.exports = {
   extractMaxEpFromTitle,
   extractOkIds,
   mapMetas,
-  uniqById,
-  extractEmbedTokens
+  uniqById
 };
