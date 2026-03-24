@@ -253,12 +253,7 @@ async function getStream(prefix, seriesUrl, episode) {
 	  url = resolved;
   }
 
-  return buildStream({
-  	  url,
-  	  episode,
-  	  name: "KhmerDub",
-  	  group: "khmerdub"
-  });
+  return buildStream(url, episode);
 }
 
 /* =========================
