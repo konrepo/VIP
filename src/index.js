@@ -162,6 +162,68 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
       return { metas: mapMetas(uniq, TYPE) };
     }
 
+    // Phumi2 (Blogger): search + paging
+    if (id === "phumi2") {
+      const base = String(site.baseUrl || "").replace(/\/$/, "");
+
+      const startUrl = extra?.search
+        ? `${base}/search?q=${encodeURIComponent(extra.search)}&max-results=12`
+        : `${base}/?max-results=12`;
+
+      const WEBSITE_PAGE_SIZE = 12;
+      const PAGES_PER_BATCH = 3;
+
+      const skip = Number(extra?.skip || 0);
+      const targetPage = Math.floor(skip / WEBSITE_PAGE_SIZE) + 1;
+
+      let url = startUrl;
+      let currentPage = 1;
+      let allItems = [];
+
+      const headers = {
+        "User-Agent":
+          "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
+        Referer: `${base}/`,
+      };
+
+      // move to requested page
+      while (currentPage < targetPage && url) {
+        const { data } = await axiosClient.get(url, { headers });
+        const $ = cheerio.load(data);
+
+        const older =
+          $("a.blog-pager-older-link").attr("href") ||
+          $("#Blog1_blog-pager-older-link").attr("href") ||
+          $(".blog-pager-older-link").attr("href") ||
+          $('a[rel="next"]').attr("href") ||
+          "";
+
+        url = older ? older : null;
+        currentPage++;
+      }
+
+      // load batch pages
+      for (let i = 0; i < PAGES_PER_BATCH && url; i++) {
+        const items = await siteEngine.getCatalogItems(id, site, url);
+        allItems.push(...items);
+
+        const { data } = await axiosClient.get(url, { headers });
+        const $ = cheerio.load(data);
+
+        const older =
+          $("a.blog-pager-older-link").attr("href") ||
+          $("#Blog1_blog-pager-older-link").attr("href") ||
+          $(".blog-pager-older-link").attr("href") ||
+          $('a[rel="next"]').attr("href") ||
+          "";
+
+        url = older ? older : null;
+      }
+
+      const uniq = uniqById(allItems);
+      return { metas: mapMetas(uniq, TYPE) };
+    }
+
     // VIP / iDrama: normal paging
     const pageSize = site.pageSize || 30;
     const skip = Number(extra?.skip || 0);
@@ -183,6 +245,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
     console.error("catalog error:", e);
     return { metas: [] };
   }
+
 });
 
 /* =========================
