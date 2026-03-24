@@ -1,7 +1,14 @@
 const cheerio = require("cheerio");
 const axiosClient = require("../utils/fetch");
-const { normalizePoster, extractVideoLinks, extractMaxEpFromTitle, extractOkIds, uniqById } = require("../utils/helpers");
 const { URL_TO_POSTID, POST_INFO, BLOG_IDS } = require("../utils/cache");
+const { 
+  normalizePoster, 
+  extractVideoLinks, 
+  extractMaxEpFromTitle, 
+  extractOkIds, 
+  uniqById, 
+  extractEmbedTokens
+} = require("../utils/helpers");
 
 const FILE_REGEX =
   /file\s*:\s*["'](https?:\/\/[^"']+\.mp4(?:\?[^"']+)?)["']/gi;  
