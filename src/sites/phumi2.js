@@ -2,27 +2,16 @@ const cheerio = require("cheerio");
 const axiosClient = require("../utils/fetch");
 const {
   normalizePoster,
-  extractVideoLinks,
-  extractMaxEpFromTitle,
-  extractOkIds,
   uniqById
 } = require("../utils/helpers");
-const { URL_TO_POSTID, POST_INFO, BLOG_IDS } = require("../utils/cache");
 
 /* =========================
    CONFIG
 ========================= */
 const PAGE_HEADERS = {
   "User-Agent":
-    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36"
 };
-
-const PHUMI_FEED_IDS = [
-  BLOG_IDS.SUNDAY1,
-  BLOG_IDS.SUNDAY2,
-  BLOG_IDS.SUNDAY3,
-  BLOG_IDS.SUNDAY4
-].filter(Boolean);
 
 /* =========================
    HELPERS
@@ -49,94 +38,6 @@ function normalizePhumiPoster(url) {
       .replace(/=w\d+-h\d+[^&]*/gi, "=s0")
       .replace(/=s\d+(-c)?/gi, "=s0")
   );
-}
-
-function extractOlderLink($, baseUrl) {
-  const candidates = [
-    $("a.blog-pager-older-link").attr("href"),
-    $("#Blog1_blog-pager-older-link").attr("href"),
-    $(".blog-pager-older-link").attr("href"),
-    $('a[rel="next"]').attr("href")
-  ];
-
-  const found = candidates.find(Boolean);
-  return found ? absolutizeUrl(found, baseUrl) : null;
-}
-
-function extractGridItems($, prefix, pageUrl) {
-  const items = [];
-  const posts = $("div.blog-posts div.grid-posts article.blog-post").toArray();
-
-  for (const post of posts) {
-    const $el = $(post);
-
-    const linkEl =
-      $el.find("div.post-filter-image a.post-filter-link").first().length
-        ? $el.find("div.post-filter-image a.post-filter-link").first()
-        : $el.find("h2.entry-title a").first();
-
-    const titleEl = $el.find("h2.entry-title").first();
-    const imgEl = $el.find("img.snip-thumbnail").first();
-
-    const link = absolutizeUrl(linkEl.attr("href") || "", pageUrl);
-    const title =
-      cleanTitle(linkEl.attr("title")) ||
-      cleanTitle(titleEl.text()) ||
-      cleanTitle(linkEl.text());
-
-    if (!title || !link) continue;
-
-    let poster =
-      imgEl.attr("data-src") ||
-      imgEl.attr("src") ||
-      linkEl.find("img").attr("data-src") ||
-      linkEl.find("img").attr("src") ||
-      $('meta[property="og:image"]').attr("content") ||
-      "";
-
-    poster = normalizePhumiPoster(poster);
-
-    items.push({
-      id: `${prefix}:${encodeURIComponent(link)}`,
-      name: title,
-      poster
-    });
-  }
-
-  return items;
-}
-
-function extractPostIds(html) {
-  const ids = new Set();
-
-  const dataPostMatches = html.match(/data-post-id="(\d+)"/g) || [];
-  for (const m of dataPostMatches) {
-    const id = m.match(/\d+/)?.[0];
-    if (id) ids.add(id);
-  }
-
-  const feedMatches =
-    html.match(/blogger\.com\/feeds\/\d+\/posts\/default\/(\d+)\?alt=json/gi) || [];
-  for (const m of feedMatches) {
-    const id = m.match(/posts\/default\/(\d+)\?alt=json/i)?.[1];
-    if (id) ids.add(id);
-  }
-
-  return Array.from(ids);
-}
-
-function getPosterFromContent(content) {
-  try {
-    const $content = cheerio.load(content || "");
-    const poster =
-      $content('meta[property="og:image"]').attr("content") ||
-      $content('meta[name="twitter:image"]').attr("content") ||
-      $content("img").first().attr("src") ||
-      "";
-    return normalizePhumiPoster(poster);
-  } catch {
-    return "";
-  }
 }
 
 function getNextPageUrl(base, html) {
@@ -169,123 +70,72 @@ function getNextPageUrl(base, html) {
   return `${base}/search?updated-max=${encodeURIComponent(published)}&max-results=12`;
 }
 
-/* =========================
-   GET POST ID
-========================= */
-async function getPostId(url) {
-  if (URL_TO_POSTID.has(url)) {
-    return URL_TO_POSTID.get(url);
-  }
-
+function parseVideosArray(html) {
   try {
-    const { data } = await axiosClient.get(url, { headers: PAGE_HEADERS });
-    const $ = cheerio.load(data);
+    const match =
+      html.match(/const\s+videos\s*=\s*(\[[\s\S]*?\]);\s*<\/script>/i) ||
+      html.match(/const\s+videos\s*=\s*(\[[\s\S]*?\]);/i);
 
-    let postId =
-      $("#player").attr("data-post-id") ||
-      $('div[id="fanta"][data-post-id]').first().attr("data-post-id") ||
-      null;
+    if (!match || !match[1]) return [];
 
-    if (!postId) {
-      const ids = extractPostIds(data);
-      if (ids.length === 1) {
-        postId = ids[0];
-      }
-    }
+    let raw = match[1].trim();
 
-    if (!postId) return null;
+    raw = raw
+      .replace(/([{,]\s*)([A-Za-z0-9_]+)\s*:/g, '$1"$2":')
+      .replace(/'/g, '"')
+      .replace(/,\s*]/g, "]")
+      .replace(/,\s*}/g, "}");
 
-    const pageTitle = $("title").text();
-    let maxEp = extractMaxEpFromTitle(pageTitle);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
 
-    if (!maxEp) {
-      const headingText =
-        $("h1.entry-title").first().text() ||
-        $("meta[property='og:title']").attr("content") ||
-        "";
-      maxEp = extractMaxEpFromTitle(headingText);
-    }
-
-    if (!maxEp) {
-      const m = data.match(/\[(\d+)\s*(?:End|EP)\]/i);
-      if (m) maxEp = parseInt(m[1], 10);
-    }
-
-    URL_TO_POSTID.set(url, postId);
-
-    if (maxEp) {
-      POST_INFO.set(postId, {
-        ...(POST_INFO.get(postId) || {}),
-        maxEp
-      });
-    }
-
-    return postId;
+    return parsed
+      .map((item, index) => ({
+        title: cleanTitle(item.title || `EP ${index + 1}`),
+        file: String(item.file || "").trim()
+      }))
+      .filter((item) => item.file);
   } catch {
-    return null;
+    return [];
   }
 }
 
-/* =========================
-   BLOGGER FETCH
-========================= */
-async function fetchFromBlog(blogId, postId) {
-  const feedUrl = `https://www.blogger.com/feeds/${blogId}/posts/default/${postId}?alt=json`;
-
+async function getPageDetail(url) {
   try {
-    const { data } = await axiosClient.get(feedUrl);
+    const { data } = await axiosClient.get(url, {
+      headers: {
+        ...PAGE_HEADERS,
+        Referer: url
+      }
+    });
 
-    const title = cleanTitle(data.entry?.title?.$t || "");
-    const content = data.entry?.content?.$t || "";
+    const $ = cheerio.load(data);
+
+    const title =
+      cleanTitle($("h1.entry-title").first().text()) ||
+      cleanTitle($('meta[property="og:title"]').attr("content")) ||
+      cleanTitle($("title").text());
 
     let thumbnail =
-      data.entry?.media$thumbnail?.url ||
-      getPosterFromContent(content) ||
+      $('meta[property="og:image"]').attr("content") ||
+      $('meta[name="twitter:image"]').attr("content") ||
+      $("#postimg img").first().attr("src") ||
+      $("meta[itemprop='image']").attr("content") ||
       "";
 
     thumbnail = normalizePhumiPoster(thumbnail);
 
-    let urls = extractVideoLinks(content);
-
-    if (!urls.length) {
-      const okIds = extractOkIds(content);
-      if (okIds.length) {
-        urls = okIds.map((id) => `https://ok.ru/videoembed/${id}`);
-      }
-    }
-
-    if (!urls.length) return null;
+    const videos = parseVideosArray(data);
+    if (!videos.length) return null;
 
     return {
       title,
       thumbnail,
-      urls
+      videos
     };
   } catch {
     return null;
   }
-}
-
-/* =========================
-   STREAM DETAIL
-========================= */
-async function getStreamDetail(postId) {
-  const cached = POST_INFO.get(postId);
-  if (cached?.detail) return cached.detail;
-
-  const results = await Promise.all(
-    PHUMI_FEED_IDS.map((blogId) => fetchFromBlog(blogId, postId))
-  );
-
-  const detail = results.find(Boolean);
-  if (!detail) return null;
-
-  POST_INFO.set(postId, {
-    ...(POST_INFO.get(postId) || {}),
-    detail
-  });
-
-  return detail;
 }
 
 /* =========================
@@ -295,8 +145,7 @@ async function getCatalogItems(prefix, siteConfig, url) {
   try {
     const { data } = await axiosClient.get(url, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
+        ...PAGE_HEADERS,
         Referer: siteConfig.baseUrl || url
       }
     });
@@ -316,9 +165,9 @@ async function getCatalogItems(prefix, siteConfig, url) {
       const imgEl = $el.find("img.snip-thumbnail").first();
 
       const title =
-        (a.attr("title") || "").trim() ||
-        titleEl.text().trim() ||
-        a.text().trim();
+        cleanTitle(a.attr("title")) ||
+        cleanTitle(titleEl.text()) ||
+        cleanTitle(a.text());
 
       const link = absolutizeUrl(a.attr("href") || "", url);
       if (!title || !link) return null;
@@ -350,22 +199,12 @@ async function getCatalogItems(prefix, siteConfig, url) {
 ========================= */
 async function getEpisodes(prefix, seriesUrl) {
   try {
-    const postId = await getPostId(seriesUrl);
-    if (!postId) return [];
+    const detail = await getPageDetail(seriesUrl);
+    if (!detail?.videos?.length) return [];
 
-    const detail = await getStreamDetail(postId);
-    if (!detail?.urls?.length) return [];
-
-    const cachedInfo = POST_INFO.get(postId) || {};
-    let urls = [...new Set(detail.urls)];
-
-    if (cachedInfo.maxEp && urls.length > cachedInfo.maxEp) {
-      urls = urls.slice(0, cachedInfo.maxEp);
-    }
-
-    return urls.map((url, index) => ({
+    return detail.videos.map((v, index) => ({
       id: `${prefix}:${encodeURIComponent(seriesUrl)}:1:${index + 1}`,
-      title: detail.title || `Episode ${index + 1}`,
+      title: detail.title || v.title || `Episode ${index + 1}`,
       season: 1,
       episode: index + 1,
       thumbnail: detail.thumbnail || "",
@@ -434,14 +273,15 @@ async function resolveOkEmbed(embedUrl) {
 /* =========================
    BUILD STREAM
 ========================= */
-function buildStream(url, episode) {
+function buildStream(url, episode, title) {
   const isOk = /ok\.ru|okcdn\.ru/i.test(url);
+  const isHls = /\.m3u8($|\?)/i.test(url);
 
   return {
     url,
     name: "Phumi2",
-    title: `Episode ${episode}`,
-    type: url.includes(".m3u8") ? "hls" : undefined,
+    title: title || `Episode ${episode}`,
+    type: isHls ? "hls" : undefined,
     behaviorHints: isOk
       ? {
           group: "phumi2",
@@ -452,7 +292,9 @@ function buildStream(url, episode) {
             }
           }
         }
-      : { group: "phumi2" }
+      : {
+          group: "phumi2"
+        }
   };
 }
 
@@ -461,21 +303,13 @@ function buildStream(url, episode) {
 ========================= */
 async function getStream(prefix, seriesUrl, episode) {
   try {
-    const postId = await getPostId(seriesUrl);
-    if (!postId) return null;
+    const detail = await getPageDetail(seriesUrl);
+    if (!detail?.videos?.length) return null;
 
-    const detail = await getStreamDetail(postId);
-    if (!detail?.urls?.length) return null;
+    const v = detail.videos[episode - 1];
+    if (!v?.file) return null;
 
-    const cachedInfo = POST_INFO.get(postId) || {};
-    let urls = [...new Set(detail.urls)];
-
-    if (cachedInfo.maxEp && urls.length > cachedInfo.maxEp) {
-      urls = urls.slice(0, cachedInfo.maxEp);
-    }
-
-    let url = urls[episode - 1];
-    if (!url) return null;
+    let url = v.file;
 
     if (url.includes("player.php")) {
       const resolved = await resolvePlayerUrl(url);
@@ -489,7 +323,7 @@ async function getStream(prefix, seriesUrl, episode) {
       url = resolved;
     }
 
-    return buildStream(url, episode);
+    return buildStream(url, episode, v.title);
   } catch {
     return null;
   }
