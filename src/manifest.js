@@ -5,7 +5,7 @@ const sites = [
   { id: "vip", name: "Phumikhmer-test" },
   { id: "sunday", name: "SundayDrama-test" },
   { id: "idrama", name: "iDramaHD-test" },
-  { id: "phumi2", name: "Phumi2" },
+  { id: "phumi2", name: "Phumi2-test" },
   { id: "khmerave", name: "KhmerAve-test" },
   { id: "merlkon", name: "Merlkon-test" },
 ];
@@ -19,17 +19,15 @@ module.exports = {
 
   resources: ["catalog", "meta", "stream"],
   types: [TYPE],
-  idPrefixes: sites.map(s => s.id),
 
-  catalogs: sites.map((site) => ({
+  catalogs: sites.map(site => ({
     type: TYPE,
     id: site.id,
     name: site.name,
-    extraSupported: EXTRA,
+    extraSupported: EXTRA
   })),
 
   behaviorHints: {
-    configurable: false,
-    adult: false,
-  },
+    configurable: false
+  }
 };
