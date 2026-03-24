@@ -3,6 +3,7 @@ const manifest = require("./manifest");
 
 const engine = require("./sites/engine");
 const khmerave = require("./sites/khmerave");
+const phumi2 = require("./sites/phumi2");
 const sites = require("./sites/config");
 
 const axiosClient = require("./utils/fetch");
@@ -33,6 +34,7 @@ const ENGINES = {
   vip: engine,
   sunday: engine,  
   idrama: engine,
+  phumi2,
   khmerave,
   merlkon: khmerave
 };
