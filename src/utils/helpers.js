@@ -87,11 +87,29 @@ function uniqById(items) {
   return [...new Map(items.map((item) => [item.id, item])).values()];
 }
 
+function extractEmbedTokens(text) {
+  if (!text) return [];
+
+  const tokenRegex = /\{(ok|gd|dm|mp4|m3u8)=([^}]+)\}/gi;
+  const results = [];
+  let m;
+
+  while ((m = tokenRegex.exec(text)) !== null) {
+    results.push({
+      type: m[1].toLowerCase(),
+      value: m[2].trim()
+    });
+  }
+
+  return results;
+}
+
 module.exports = {
   normalizePoster,
   extractVideoLinks,
   extractMaxEpFromTitle,
   extractOkIds,
   mapMetas,
-  uniqById
+  uniqById,
+  extractEmbedTokens
 };

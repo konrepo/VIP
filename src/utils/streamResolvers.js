@@ -7,7 +7,7 @@ async function resolvePlayerUrl(playerUrl) {
   try {
     const { data } = await axiosClient.get(playerUrl);
 
-    const html = String(data)
+    const html = data
       .replace(/\\\//g, "/")
       .replace(/&amp;/g, "&");
 
