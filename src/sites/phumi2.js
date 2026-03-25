@@ -51,13 +51,8 @@ function normalizeEpisodeTitle(title, index) {
 
   let t = title.trim();
 
-  // EP 1 → Episode 1
   t = t.replace(/^EP\s*/i, "Episode ");
-
-  // EP30 → Episode 30
   t = t.replace(/^Episode\s*(\d+)E$/i, "Episode $1 End");
-
-  // EP 30E → Episode 30 End
   t = t.replace(/^Episode\s*(\d+)\s*E$/i, "Episode $1 End");
 
   return t;
@@ -84,7 +79,7 @@ function getNextPageUrl(base, html) {
 
   const published =
     last.find('meta[itemprop="datePublished"]').attr("content") ||
-    last.find('time[datetime]').attr("datetime") ||
+    last.find("time[datetime]").attr("datetime") ||
     last.find(".published").attr("datetime") ||
     "";
 
@@ -125,6 +120,8 @@ function parseVideosArray(html) {
 
 async function getPageDetail(url) {
   try {
+    if (!url) return null;
+
     const { data } = await axiosClient.get(url, {
       headers: {
         ...PAGE_HEADERS,
@@ -205,7 +202,7 @@ async function getCatalogItems(prefix, siteConfig, url) {
       poster = normalizePhumiPoster(poster);
 
       return {
-        id: `${prefix}:${encodeURIComponent(link)}`,
+        id: link,
         name: title,
         poster
       };
@@ -227,11 +224,11 @@ async function getEpisodes(prefix, seriesUrl) {
 
     return detail.videos.map((v, index) => ({
       id: `${prefix}:${encodeURIComponent(seriesUrl)}:1:${index + 1}`,
-      title: detail.title || v.title || `Episode ${index + 1}`,
+      url: seriesUrl,
+      title: v.title || `Episode ${index + 1}`,
       season: 1,
       episode: index + 1,
-      thumbnail: detail.thumbnail || "",
-      released: new Date().toISOString()
+      thumbnail: detail.thumbnail || ""
     }));
   } catch {
     return [];
@@ -249,7 +246,7 @@ async function getStream(prefix, seriesUrl, episode) {
     const v = detail.videos[episode - 1];
     if (!v?.file) return null;
 
-    let url = v.file;
+    let url = String(v.file).trim();
 
     if (url.includes("player.php")) {
       const resolved = await resolvePlayerUrl(url);
@@ -257,13 +254,23 @@ async function getStream(prefix, seriesUrl, episode) {
       url = resolved;
     }
 
-    if (url.includes("ok.ru/videoembed/")) {
+    if (/ok\.ru\/video\//i.test(url)) {
+      url = url.replace("/video/", "/videoembed/");
+    }
+
+    if (/ok\.ru\/videoembed\//i.test(url)) {
       const resolved = await resolveOkEmbed(url);
       if (!resolved) return null;
       url = resolved;
     }
 
-    return buildStream(url, episode, v.title, "PhumiClub", "phumi2");
+    return buildStream(
+      url,
+      episode,
+      v.title || `Episode ${episode}`,
+      "PhumiClub",
+      "phumi2"
+    );
   } catch {
     return null;
   }
