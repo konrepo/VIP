@@ -217,14 +217,9 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
         : `${base}/?max-results=12`;
 
       const WEBSITE_PAGE_SIZE = site.pageSize || 12;
-      const PAGES_PER_BATCH = 3;
 
       const skip = Number(extra?.skip || 0);
 	  const targetPage = Math.floor(skip / WEBSITE_PAGE_SIZE) + 1;
-      const startPage =
-        Math.floor((targetPage - 1) / PAGES_PER_BATCH) *
-          PAGES_PER_BATCH +
-        1;
 
       let url = startUrl;
       let currentPage = 1;
@@ -237,29 +232,23 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
       };
 
       // move to requested page
-      while (currentPage < startPage && url) {
+      while (currentPage < targetPage && url) {
         const { data } = await axiosClient.get(url, { headers });
         url = siteEngine.getNextPageUrl(base, data);
         currentPage++;
       }
 
-      // load batch pages
-      for (let i = 0; i < PAGES_PER_BATCH && url; i++) {
+      // load current page only
+      if (url) {
         const items = await siteEngine.getCatalogItems(id, site, url);
         allItems.push(...items);
-
-        const { data } = await axiosClient.get(url, { headers });
-        url = siteEngine.getNextPageUrl(base, data);
       }
 
       const uniq = uniqById(allItems);
       const fixed = applyMetaId(uniq, id);
 
       const result = {
-        metas: mapMetas(
-          fixed.slice(0, WEBSITE_PAGE_SIZE * PAGES_PER_BATCH),
-          TYPE
-        ),
+        metas: mapMetas(fixed, TYPE),
         cacheMaxAge: 3600
       };
 
