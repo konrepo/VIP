@@ -233,6 +233,12 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 
       // move to requested page
       while (currentPage < targetPage && url) {
+        console.log("PHUMI2 WALK:", {
+          currentPage,
+          targetPage,
+          url
+        });
+		  
         const { data } = await axiosClient.get(url, { headers });
         url = siteEngine.getNextPageUrl(base, data);
         currentPage++;
