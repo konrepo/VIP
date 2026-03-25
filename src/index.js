@@ -5,6 +5,7 @@ const engine = require("./sites/engine");
 const khmerave = require("./sites/khmerave");
 const phumi2 = require("./sites/phumi2");
 const PAGE_TRACKER = new Map();
+const PAGE_URL_CACHE = new Map();
 
 const sites = require("./sites/config");
 
@@ -226,8 +227,8 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
       const skip = Number(extra?.skip || 0);
 	  const rawTargetPage = Math.floor(skip / WEBSITE_PAGE_SIZE) + 1;
 
-      const cacheKeyPage = `phumi2:${id}:${extra?.search || ""}`;
-      const lastPage = PAGE_TRACKER.get(cacheKeyPage) || 1;
+      const pageKeyBase = `phumi2:${id}:${extra?.search || ""}`;
+      const lastPage = PAGE_TRACKER.get(pageKeyBase) || 1;
 
       const targetPage =
         rawTargetPage > lastPage + 1
@@ -238,8 +239,8 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
       cacheKey = `catalog:${id}:${searchKey}:page:${targetPage}`;
 
       const cached = CATALOG_CACHE.get(cacheKey);
-      if (cached) return cached;	
-	
+      if (cached) return cached;
+
       let url = startUrl;
       let currentPage = 1;
       let allItems = [];
@@ -250,12 +251,33 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
         Referer: `${base}/`,
       };
 
+      // reuse nearest cached page URL
+      let resumePage = 1;
+
+      for (let p = targetPage; p >= 1; p--) {
+        const cachedUrl = PAGE_URL_CACHE.get(`${pageKeyBase}:page:${p}`);
+        if (cachedUrl) {
+          url = cachedUrl;
+          resumePage = p;
+          break;
+        }
+      }
+
+      currentPage = resumePage;
+
+      // always cache page 1 start URL
+      if (!PAGE_URL_CACHE.has(`${pageKeyBase}:page:1`)) {
+        PAGE_URL_CACHE.set(`${pageKeyBase}:page:1`, startUrl);
+      }
+
       console.log("CATALOG DEBUG:", {
         id,
         skip,
         rawTargetPage,
         targetPage,
-        lastPage
+        lastPage,
+        resumePage,
+        url
       });
 
       // move to requested page
@@ -267,12 +289,20 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
         });
 
         const { data } = await axiosClient.get(url, { headers });
-        url = siteEngine.getNextPageUrl(base, data);
+        const nextUrl = siteEngine.getNextPageUrl(base, data);
+
+        if (nextUrl) {
+          PAGE_URL_CACHE.set(`${pageKeyBase}:page:${currentPage + 1}`, nextUrl);
+        }
+
+        url = nextUrl;
         currentPage++;
       }
 
       // load current page only
       if (url) {
+        PAGE_URL_CACHE.set(`${pageKeyBase}:page:${targetPage}`, url);
+
         const items = await siteEngine.getCatalogItems(id, site, url);
         allItems.push(...items);
       }
@@ -285,9 +315,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
         cacheMaxAge: 3600
       };
 
-      // update tracker AFTER successful load
-      PAGE_TRACKER.set(cacheKeyPage, targetPage);
-
+      PAGE_TRACKER.set(pageKeyBase, targetPage);
       CATALOG_CACHE.set(cacheKey, result);
       return result;
     }
