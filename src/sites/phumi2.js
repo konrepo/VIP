@@ -16,7 +16,9 @@ const {
 ========================= */
 const PAGE_HEADERS = {
   "User-Agent":
-    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36"
+    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9"
 };
 
 /* =========================
@@ -49,7 +51,7 @@ function normalizePhumiPoster(url) {
 function normalizeEpisodeTitle(title, index) {
   if (!title) return `Episode ${index + 1}`;
 
-  let t = title.trim();
+  let t = String(title).trim();
 
   t = t.replace(/^EP\s*/i, "Episode ");
   t = t.replace(/^Episode\s*(\d+)E$/i, "Episode $1 End");
@@ -89,11 +91,14 @@ function getNextPageUrl(base, html) {
 }
 
 function parseVideosArray(html) {
+  if (!html) return [];
+
   try {
     const match =
       html.match(/const\s+videos\s*=\s*(\[[\s\S]*?\]);\s*<\/script>/i) ||
       html.match(/const\s+videos\s*=\s*(\[[\s\S]*?\]);/i) ||
-      html.match(/(?:let|var)\s+videos\s*=\s*(\[[\s\S]*?\]);/i) ||
+      html.match(/let\s+videos\s*=\s*(\[[\s\S]*?\]);/i) ||
+      html.match(/var\s+videos\s*=\s*(\[[\s\S]*?\]);/i) ||
       html.match(/window\.videos\s*=\s*(\[[\s\S]*?\]);/i);
 
     if (!match || !match[1]) return [];
@@ -115,13 +120,16 @@ function parseVideosArray(html) {
         file: String(item?.file || "").trim()
       }))
       .filter((item) => item.file);
-  } catch {
+  } catch (err) {
+    console.error("phumi2 parseVideosArray error:", err.message);
     return [];
   }
 }
 
 async function getPageDetail(url) {
   try {
+    if (!url || !/^https?:\/\//i.test(url)) return null;
+
     const { data } = await axiosClient.get(url, {
       headers: {
         ...PAGE_HEADERS,
@@ -129,7 +137,8 @@ async function getPageDetail(url) {
       }
     });
 
-    const $ = cheerio.load(data);
+    const html = String(data || "");
+    const $ = cheerio.load(html);
 
     const title =
       cleanTitle($("h1.entry-title").first().text()) ||
@@ -145,7 +154,7 @@ async function getPageDetail(url) {
 
     thumbnail = normalizePhumiPoster(thumbnail);
 
-    const videos = parseVideosArray(data);
+    const videos = parseVideosArray(html);
     if (!videos.length) return null;
 
     return {
@@ -153,7 +162,8 @@ async function getPageDetail(url) {
       thumbnail,
       videos
     };
-  } catch {
+  } catch (err) {
+    console.error("phumi2 getPageDetail error:", err.message);
     return null;
   }
 }
@@ -209,7 +219,8 @@ async function getCatalogItems(prefix, siteConfig, url) {
     });
 
     return uniqById(results.filter(Boolean));
-  } catch {
+  } catch (err) {
+    console.error("phumi2 catalog error:", err.message);
     return [];
   }
 }
@@ -223,15 +234,19 @@ async function getEpisodes(prefix, seriesUrl) {
     if (!detail?.videos?.length) return [];
 
     return detail.videos.map((v, index) => ({
-      id: `${prefix}:${encodeURIComponent(seriesUrl)}:1:${index + 1}`,
+      id: index + 1,
       url: seriesUrl,
-      title: v.title || detail.title || `Episode ${index + 1}`,
+      title: detail.title || `Episode ${index + 1}`,
       season: 1,
       episode: index + 1,
       thumbnail: detail.thumbnail || "",
-      released: new Date().toISOString()
+      released: new Date().toISOString(),
+      behaviorHints: {
+        group: `${prefix}:${encodeURIComponent(seriesUrl)}`
+      }
     }));
-  } catch {
+  } catch (err) {
+    console.error("phumi2 getEpisodes error:", err.message);
     return [];
   }
 }
@@ -251,20 +266,27 @@ async function getStream(prefix, seriesUrl, episode) {
 
     let url = String(v.file).trim();
 
+    if (url.startsWith("//")) {
+      url = "https:" + url;
+    }
+
+    url = url.replace(/^http:/i, "https:");
+
     if (url.includes("player.php")) {
       const resolved = await resolvePlayerUrl(url);
       if (!resolved) return null;
       url = resolved;
     }
 
-    if (url.includes("ok.ru/videoembed/")) {
+    if (/ok\.ru\/(?:videoembed|video)\//i.test(url)) {
       const resolved = await resolveOkEmbed(url);
       if (!resolved) return null;
       url = resolved;
     }
 
     return buildStream(url, episode, v.title, "PhumiClub", "phumi2");
-  } catch {
+  } catch (err) {
+    console.error("phumi2 getStream error:", err.message);
     return null;
   }
 }
