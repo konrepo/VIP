@@ -57,9 +57,13 @@ const builder = new addonBuilder(manifest);
 ========================= */
 builder.defineCatalogHandler(async ({ id, extra }) => {
   try {
-	const cacheKey = `catalog:${id}:${JSON.stringify(extra || {})}`;
-    const cached = CATALOG_CACHE.get(cacheKey);
-    if (cached) return cached;  
+	let cacheKey;
+	// Phumi2 uses normalized paging → custom cache key later
+	if (id !== "phumi2") {
+	  cacheKey = `catalog:${id}:${JSON.stringify(extra || {})}`;
+      const cached = CATALOG_CACHE.get(cacheKey);
+      if (cached) return cached;
+	}  
 	
 	const ctx = getSiteEngine(id);
     if (!ctx) return { metas: [] };
@@ -230,6 +234,12 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
           ? lastPage + 1
           : rawTargetPage;
 
+      const searchKey = extra?.search || "";
+      cacheKey = `catalog:${id}:${searchKey}:page:${targetPage}`;
+
+      const cached = CATALOG_CACHE.get(cacheKey);
+      if (cached) return cached;	
+	
       let url = startUrl;
       let currentPage = 1;
       let allItems = [];
