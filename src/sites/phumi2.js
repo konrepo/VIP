@@ -51,13 +51,8 @@ function normalizeEpisodeTitle(title, index) {
 
   let t = title.trim();
 
-  // EP 1 → Episode 1
   t = t.replace(/^EP\s*/i, "Episode ");
-
-  // EP30 → Episode 30
   t = t.replace(/^Episode\s*(\d+)E$/i, "Episode $1 End");
-
-  // EP 30E → Episode 30 End
   t = t.replace(/^Episode\s*(\d+)\s*E$/i, "Episode $1 End");
 
   return t;
@@ -97,7 +92,9 @@ function parseVideosArray(html) {
   try {
     const match =
       html.match(/const\s+videos\s*=\s*(\[[\s\S]*?\]);\s*<\/script>/i) ||
-      html.match(/const\s+videos\s*=\s*(\[[\s\S]*?\]);/i);
+      html.match(/const\s+videos\s*=\s*(\[[\s\S]*?\]);/i) ||
+      html.match(/(?:let|var)\s+videos\s*=\s*(\[[\s\S]*?\]);/i) ||
+      html.match(/window\.videos\s*=\s*(\[[\s\S]*?\]);/i);
 
     if (!match || !match[1]) return [];
 
@@ -114,8 +111,8 @@ function parseVideosArray(html) {
 
     return parsed
       .map((item, index) => ({
-        title: normalizeEpisodeTitle(item.title, index),
-        file: String(item.file || "").trim()
+        title: normalizeEpisodeTitle(item?.title, index),
+        file: String(item?.file || "").trim()
       }))
       .filter((item) => item.file);
   } catch {
@@ -228,7 +225,7 @@ async function getEpisodes(prefix, seriesUrl) {
     return detail.videos.map((v, index) => ({
       id: `${prefix}:${encodeURIComponent(seriesUrl)}:1:${index + 1}`,
       url: seriesUrl,
-      title: detail.title || v.title || `Episode ${index + 1}`,
+      title: v.title || detail.title || `Episode ${index + 1}`,
       season: 1,
       episode: index + 1,
       thumbnail: detail.thumbnail || "",
@@ -252,7 +249,7 @@ async function getStream(prefix, seriesUrl, episode) {
     const v = detail.videos[episode - 1];
     if (!v?.file) return null;
 
-    let url = v.file;
+    let url = String(v.file).trim();
 
     if (url.includes("player.php")) {
       const resolved = await resolvePlayerUrl(url);
