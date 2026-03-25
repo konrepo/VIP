@@ -21,6 +21,9 @@ const PAGE_HEADERS = {
   "Accept-Language": "en-US,en;q=0.9"
 };
 
+const DETAIL_CACHE = new Map();
+const DETAIL_TTL = 5 * 60 * 1000;
+
 /* =========================
    HELPERS
 ========================= */
@@ -58,6 +61,18 @@ function normalizeEpisodeTitle(title, index) {
   t = t.replace(/^Episode\s*(\d+)\s*E$/i, "Episode $1 End");
 
   return t;
+}
+
+function getCachedDetail(url) {
+  const cached = DETAIL_CACHE.get(url);
+  if (!cached) return null;
+
+  if (Date.now() - cached.time > DETAIL_TTL) {
+    DETAIL_CACHE.delete(url);
+    return null;
+  }
+
+  return cached.data;
 }
 
 function getNextPageUrl(base, html) {
@@ -131,14 +146,42 @@ function parseVideosArray(html) {
 
 async function getPageDetail(url) {
   try {
+    const cached = getCachedDetail(url);
+    if (cached) {
+      console.log("PHUMI2 getPageDetail CACHE HIT:", url);
+      return cached;
+    }
+
     console.log("PHUMI2 getPageDetail URL:", url);
 
-    const { data } = await axiosClient.get(url, {
-      headers: {
-        ...PAGE_HEADERS,
-        Referer: url
+    let data;
+
+    try {
+      const res = await axiosClient.get(url, {
+        headers: {
+          ...PAGE_HEADERS,
+          Referer: url
+        }
+      });
+      data = res.data;
+    } catch (err) {
+      if (err.response?.status === 429) {
+        console.log("PHUMI2 429 RETRY:", url);
+
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+
+        const retryRes = await axiosClient.get(url, {
+          headers: {
+            ...PAGE_HEADERS,
+            Referer: url
+          }
+        });
+
+        data = retryRes.data;
+      } else {
+        throw err;
       }
-    });
+    }
 
     console.log("PHUMI2 HTML LENGTH:", data?.length || 0);
 
@@ -169,11 +212,18 @@ async function getPageDetail(url) {
 
     thumbnail = normalizePhumiPoster(thumbnail);
 
-    return {
+    const detail = {
       title,
       thumbnail,
       videos
     };
+
+    DETAIL_CACHE.set(url, {
+      time: Date.now(),
+      data: detail
+    });
+
+    return detail;
 
   } catch (err) {
     console.error("PHUMI2 getPageDetail ERROR:", err.message);
