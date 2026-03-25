@@ -221,12 +221,6 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 
     // Phumi2 (Blogger): search + paging
     if (id === "phumi2") {
-      console.log("PHUMI2 CATALOG RESULT:", {
-        count: fixed.length,
-        firstMeta: fixed[0]?.id || null,
-        firstUrl: fixed[0] || null
-      });
-	
       const base = String(site.baseUrl || "").replace(/\/$/, "");
 
       const startUrl = extra?.search
@@ -320,6 +314,12 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 
       const uniq = uniqById(allItems);
       const fixed = applyMetaId(uniq, id);
+
+      console.log("PHUMI2 CATALOG RESULT:", {
+        count: fixed.length,
+        firstMeta: fixed[0]?.id || null,
+        firstUrl: fixed[0] || null
+      });
 
       const result = {
         metas: mapMetas(fixed, TYPE),
