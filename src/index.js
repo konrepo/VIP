@@ -4,6 +4,7 @@ const manifest = require("./manifest");
 const engine = require("./sites/engine");
 const khmerave = require("./sites/khmerave");
 const phumi2 = require("./sites/phumi2");
+const PAGE_TRACKER = new Map();
 
 const sites = require("./sites/config");
 
@@ -219,7 +220,15 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
       const WEBSITE_PAGE_SIZE = site.pageSize || 12;
 
       const skip = Number(extra?.skip || 0);
-	  const targetPage = Math.floor(skip / WEBSITE_PAGE_SIZE) + 1;
+	  const rawTargetPage = Math.floor(skip / WEBSITE_PAGE_SIZE) + 1;
+
+      const cacheKeyPage = `phumi2:${id}:${extra?.search || ""}`;
+      const lastPage = PAGE_TRACKER.get(cacheKeyPage) || 1;
+
+      const targetPage =
+        rawTargetPage > lastPage + 1
+          ? lastPage + 1
+          : rawTargetPage;
 
       let url = startUrl;
       let currentPage = 1;
@@ -231,6 +240,14 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
         Referer: `${base}/`,
       };
 
+      console.log("CATALOG DEBUG:", {
+        id,
+        skip,
+        rawTargetPage,
+        targetPage,
+        lastPage
+      });
+
       // move to requested page
       while (currentPage < targetPage && url) {
         console.log("PHUMI2 WALK:", {
@@ -238,7 +255,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
           targetPage,
           url
         });
-		  
+
         const { data } = await axiosClient.get(url, { headers });
         url = siteEngine.getNextPageUrl(base, data);
         currentPage++;
@@ -257,6 +274,9 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
         metas: mapMetas(fixed, TYPE),
         cacheMaxAge: 3600
       };
+
+      // update tracker AFTER successful load
+      PAGE_TRACKER.set(cacheKeyPage, targetPage);
 
       CATALOG_CACHE.set(cacheKey, result);
       return result;
