@@ -205,7 +205,7 @@ async function getCatalogItems(prefix, siteConfig, url) {
       poster = normalizePhumiPoster(poster);
 
       return {
-        id: `${prefix}:${encodeURIComponent(link)}`,
+        id: link,
         name: title,
         poster
       };
