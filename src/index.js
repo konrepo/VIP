@@ -218,9 +218,13 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 
       const WEBSITE_PAGE_SIZE = site.pageSize || 12;
       const PAGES_PER_BATCH = 3;
+      const SKIP_STEP = WEBSITE_PAGE_SIZE * PAGES_PER_BATCH;
 
       const skip = Number(extra?.skip || 0);
-      const targetPage = Math.floor(skip / WEBSITE_PAGE_SIZE) + 1;
+      const startPage =
+        Math.floor(skip / SKIP_STEP) *
+          PAGES_PER_BATCH +
+        1;
 
       let url = startUrl;
       let currentPage = 1;
@@ -233,7 +237,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
       };
 
       // move to requested page
-      while (currentPage < targetPage && url) {
+      while (currentPage < startPage && url) {
         const { data } = await axiosClient.get(url, { headers });
         url = siteEngine.getNextPageUrl(base, data);
         currentPage++;
@@ -249,7 +253,18 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
       }
 
       const uniq = uniqById(allItems);
-      return { metas: mapMetas(uniq, TYPE) };
+      const fixed = applyMetaId(uniq, id);
+
+      const result = {
+        metas: mapMetas(
+          fixed.slice(0, WEBSITE_PAGE_SIZE * PAGES_PER_BATCH),
+          TYPE
+        ),
+        cacheMaxAge: 3600
+      };
+
+      CATALOG_CACHE.set(cacheKey, result);
+      return result;
     }
 	
     // VIP / iDrama: normal paging
