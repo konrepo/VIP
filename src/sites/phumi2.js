@@ -250,14 +250,15 @@ async function getCatalogItems(prefix, siteConfig, url) {
       poster = normalizePhumiPoster(poster);
 
       return {
-        id: `${prefix}:${encodeURIComponent(link)}`,
+        id: link,
         name: title,
         poster
       };
     });
 
     return uniqById(results.filter(Boolean));
-  } catch {
+  } catch (err) {
+    console.error("phumi2 catalog error:", err.message);
     return [];
   }
 }
