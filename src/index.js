@@ -415,6 +415,14 @@ builder.defineMetaHandler(async ({ id }) => {
 
     if (prefix === "khmerave" || prefix === "merlkon") {
       episodes = await khmerave.getEpisodes(prefix, seriesUrl);
+    } else if (prefix === "phumi2") {
+      episodes = await siteEngine.getEpisodes(prefix, seriesUrl);
+
+      if (!episodes.length) {
+        console.log("PHUMI2 META RETRY:", seriesUrl);
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        episodes = await siteEngine.getEpisodes(prefix, seriesUrl);
+      }
     } else {
       episodes = await siteEngine.getEpisodes(prefix, seriesUrl);
     }

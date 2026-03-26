@@ -23,6 +23,7 @@ const PAGE_HEADERS = {
 
 const DETAIL_CACHE = new Map();
 const DETAIL_TTL = 5 * 60 * 1000;
+const DETAIL_PENDING = new Map();
 
 /* =========================
    HELPERS
@@ -188,55 +189,70 @@ async function getPageDetail(url) {
       return cached;
     }
 
-    console.log("PHUMI2 getPageDetail URL:", url);
-
-    const data = await fetchWithRetry(url, {
-      ...PAGE_HEADERS,
-      Referer: "https://www.phumikhmer1.club/"
-    });
-
-    console.log("PHUMI2 HTML LENGTH:", data?.length || 0);
-
-    const html = String(data || "");
-    const videos = parseVideosArray(html);
-
-    console.log("PHUMI2 VIDEOS PARSED:", videos.length);
-
-    if (!videos.length) {
-      console.log("PHUMI2: FAILED TO PARSE VIDEOS");
-      return null;
+    const pending = DETAIL_PENDING.get(url);
+    if (pending) {
+      console.log("PHUMI2 getPageDetail PENDING HIT:", url);
+      return await pending;
     }
 
-    const $ = cheerio.load(html);
+    const requestPromise = (async () => {
+      console.log("PHUMI2 getPageDetail URL:", url);
 
-    const title =
-      cleanTitle($("h1.entry-title").first().text()) ||
-      cleanTitle($('meta[property="og:title"]').attr("content")) ||
-      cleanTitle($("title").text());
+      const data = await fetchWithRetry(url, {
+        ...PAGE_HEADERS,
+        Referer: "https://www.phumikhmer1.club/"
+      });
 
-    let thumbnail =
-      $('meta[property="og:image"]').attr("content") ||
-      $('meta[name="twitter:image"]').attr("content") ||
-      $("#postimg img").first().attr("src") ||
-      $("meta[itemprop='image']").attr("content") ||
-      "";
+      console.log("PHUMI2 HTML LENGTH:", data?.length || 0);
 
-    thumbnail = normalizePhumiPoster(thumbnail);
+      const html = String(data || "");
+      const videos = parseVideosArray(html);
 
-    const detail = {
-      title,
-      thumbnail,
-      videos
-    };
+      console.log("PHUMI2 VIDEOS PARSED:", videos.length);
 
-    DETAIL_CACHE.set(url, {
-      time: Date.now(),
-      data: detail
-    });
+      if (!videos.length) {
+        console.log("PHUMI2: FAILED TO PARSE VIDEOS");
+        return null;
+      }
 
-    return detail;
+      const $ = cheerio.load(html);
+
+      const title =
+        cleanTitle($("h1.entry-title").first().text()) ||
+        cleanTitle($('meta[property="og:title"]').attr("content")) ||
+        cleanTitle($("title").text());
+
+      let thumbnail =
+        $('meta[property="og:image"]').attr("content") ||
+        $('meta[name="twitter:image"]').attr("content") ||
+        $("#postimg img").first().attr("src") ||
+        $("meta[itemprop='image']").attr("content") ||
+        "";
+
+      thumbnail = normalizePhumiPoster(thumbnail);
+
+      const detail = {
+        title,
+        thumbnail,
+        videos
+      };
+
+      DETAIL_CACHE.set(url, {
+        time: Date.now(),
+        data: detail
+      });
+
+      return detail;
+    })();
+
+    DETAIL_PENDING.set(url, requestPromise);
+
+    const result = await requestPromise;
+    DETAIL_PENDING.delete(url);
+    return result;
 
   } catch (err) {
+    DETAIL_PENDING.delete(url);
     console.error("PHUMI2 getPageDetail ERROR:", err.message);
     return null;
   }
