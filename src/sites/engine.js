@@ -17,6 +17,8 @@ const {
   buildStream
 } = require("../utils/streamResolvers");
 
+const DEBUG = false;
+
 /* =========================
    GET POST ID
 ========================= */
@@ -253,7 +255,7 @@ async function getSundayEpisodesFromBlogger(seriesUrl, postId) {
 
   let maxEp = POST_INFO.get(postId)?.maxEp || null;
 
-  console.log("MAX EP DEBUG:", {
+  if (DEBUG) console.log("MAX EP DEBUG:", {
     postId,
     stored: POST_INFO.get(postId),
     maxEp
@@ -280,8 +282,8 @@ async function getSundayEpisodesFromBlogger(seriesUrl, postId) {
     maxEp: null
   });
 
-  console.log("FINAL MAX EP:", maxEp);
-  console.log("FINAL EP COUNT:", episodes.length);
+  if (DEBUG) console.log("FINAL MAX EP:", maxEp);
+  if (DEBUG) console.log("FINAL EP COUNT:", episodes.length);
 
   return episodes;
 }
@@ -295,7 +297,7 @@ async function getEpisodes(prefix, seriesUrl) {
   if (prefix === "sunday") {
     const pageEpisodes = await getSundayEpisodesFromPage(seriesUrl);
     if (pageEpisodes.length) {
-      console.log("SUNDAY PAGE EPISODES:", pageEpisodes.length);
+      if (DEBUG) console.log("SUNDAY PAGE EPISODES:", pageEpisodes.length);
       return pageEpisodes;
     }
 
@@ -314,7 +316,7 @@ async function getEpisodes(prefix, seriesUrl) {
 
   let maxEp = POST_INFO.get(postId)?.maxEp || null;
 
-  console.log("MAX EP DEBUG:", {
+  if (DEBUG) console.log("MAX EP DEBUG:", {
     postId,
     stored: POST_INFO.get(postId),
     maxEp
@@ -341,8 +343,8 @@ async function getEpisodes(prefix, seriesUrl) {
     maxEp
   });
 
-  console.log("FINAL MAX EP:", maxEp);
-  console.log("FINAL EP COUNT:", episodes.length);
+  if (DEBUG) console.log("FINAL MAX EP:", maxEp);
+  if (DEBUG) console.log("FINAL EP COUNT:", episodes.length);
 
   return episodes;
 }

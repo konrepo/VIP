@@ -13,6 +13,8 @@ const {
   buildStream
 } = require("../utils/streamResolvers");
 
+const DEBUG = false;
+
 /* =========================
    CONFIG
 ========================= */
@@ -116,13 +118,13 @@ function parseVideosArray(html) {
       html.match(/let\s+videos\s*=\s*(\[[\s\S]*?\]);/i) ||
       html.match(/var\s+videos\s*=\s*(\[[\s\S]*?\]);/i);
 
-    console.log("PHUMI2 parseVideosArray MATCH FOUND:", !!match);
+    if (DEBUG) console.log("PHUMI2 parseVideosArray MATCH FOUND:", !!match);
 
     if (!match || !match[1]) return [];
 
     let raw = match[1].trim();
 
-    console.log("PHUMI2 RAW:", raw.slice(0, 200));
+    if (DEBUG) console.log("PHUMI2 RAW:", raw.slice(0, 200));
 
     raw = raw
       .replace(/([{,]\s*)([A-Za-z0-9_]+)\s*:/g, '$1"$2":')
@@ -132,7 +134,7 @@ function parseVideosArray(html) {
 
     const parsed = JSON.parse(raw);
 
-    console.log("PHUMI2 PARSED LENGTH:", parsed.length);
+    if (DEBUG) console.log("PHUMI2 PARSED LENGTH:", parsed.length);
 
     return parsed
       .map((item, index) => ({
@@ -165,7 +167,7 @@ async function fetchWithRetry(url, headers, retries = 3) {
       lastErr = err;
 
       const status = err.response?.status || 0;
-      console.log("PHUMI2 FETCH RETRY:", {
+      if (DEBUG) console.log("PHUMI2 FETCH RETRY:", {
         attempt: i + 1,
         status,
         url
@@ -187,33 +189,33 @@ async function getPageDetail(url) {
   try {
     const cached = getCachedDetail(url);
     if (cached) {
-      console.log("PHUMI2 getPageDetail CACHE HIT:", url);
+      if (DEBUG) console.log("PHUMI2 getPageDetail CACHE HIT:", url);
       return cached;
     }
 
     const pending = DETAIL_PENDING.get(url);
     if (pending) {
-      console.log("PHUMI2 getPageDetail PENDING HIT:", url);
+      if (DEBUG) console.log("PHUMI2 getPageDetail PENDING HIT:", url);
       return await pending;
     }
 
     const requestPromise = (async () => {
-      console.log("PHUMI2 getPageDetail URL:", url);
+      if (DEBUG) console.log("PHUMI2 getPageDetail URL:", url);
 
       const data = await fetchWithRetry(url, {
         ...PAGE_HEADERS,
         Referer: "https://www.phumikhmer1.club/"
       });
 
-      console.log("PHUMI2 HTML LENGTH:", data?.length || 0);
+      if (DEBUG) console.log("PHUMI2 HTML LENGTH:", data?.length || 0);
 
       const html = String(data || "");
       const videos = parseVideosArray(html);
 
-      console.log("PHUMI2 VIDEOS PARSED:", videos.length);
+      if (DEBUG) console.log("PHUMI2 VIDEOS PARSED:", videos.length);
 
       if (!videos.length) {
-        console.log("PHUMI2: FAILED TO PARSE VIDEOS");
+        if (DEBUG) console.log("PHUMI2: FAILED TO PARSE VIDEOS");
         return null;
       }
 
@@ -322,20 +324,20 @@ async function getCatalogItems(prefix, siteConfig, url) {
 ========================= */
 async function getEpisodes(prefix, seriesUrl) {
   try {
-    console.log("PHUMI2 getEpisodes START:", {
+    if (DEBUG) console.log("PHUMI2 getEpisodes START:", {
       prefix,
       seriesUrl
     });
 
     const detail = await getPageDetail(seriesUrl);
 
-    console.log("PHUMI2 getEpisodes DETAIL:", {
+    if (DEBUG) console.log("PHUMI2 getEpisodes DETAIL:", {
       hasDetail: !!detail,
       videoCount: detail?.videos?.length || 0
     });
 
     if (!detail?.videos?.length) {
-      console.log("PHUMI2 getEpisodes: NO VIDEOS FOUND");
+      if (DEBUG) console.log("PHUMI2 getEpisodes: NO VIDEOS FOUND");
       return [];
     }
 
@@ -352,7 +354,7 @@ async function getEpisodes(prefix, seriesUrl) {
       }
     }));
 
-    console.log("PHUMI2 getEpisodes SUCCESS:", episodes.length);
+    if (DEBUG) console.log("PHUMI2 getEpisodes SUCCESS:", episodes.length);
 
     return episodes;
 
