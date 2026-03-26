@@ -2,6 +2,7 @@
 
 const { addonBuilder, serveHTTP } = require("stremio-addon-sdk");
 const manifest = require("./manifest");
+const DEBUG = false;
 
 const engine = require("./sites/engine");
 const khmerave = require("./sites/khmerave");
@@ -69,7 +70,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 	}  
 	
 	const ctx = getSiteEngine(id);
-	console.log("CATALOG HANDLER DEBUG:", {
+	if (DEBUG) console.log("CATALOG HANDLER DEBUG:", {
 	  id,
 	  extra
 	});
@@ -277,7 +278,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
         PAGE_URL_CACHE.set(`${pageKeyBase}:page:1`, startUrl);
       }
 
-      console.log("CATALOG DEBUG:", {
+      if (DEBUG) console.log("CATALOG DEBUG:", {
         id,
         skip,
         rawTargetPage,
@@ -289,7 +290,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 
       // move to requested page
       while (currentPage < targetPage && url) {
-        console.log("PHUMI2 WALK:", {
+        if (DEBUG) console.log("PHUMI2 WALK:", {
           currentPage,
           targetPage,
           url
@@ -317,7 +318,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
       const uniq = uniqById(allItems);
       const fixed = applyMetaId(uniq, id);
 
-      console.log("PHUMI2 CATALOG RESULT:", {
+      if (DEBUG) console.log("PHUMI2 CATALOG RESULT:", {
         count: fixed.length,
         firstMeta: fixed[0]?.id || null,
         firstUrl: fixed[0] || null
@@ -385,7 +386,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 ========================= */
 builder.defineMetaHandler(async ({ id }) => {
   try {
-    console.log("META HANDLER DEBUG:", { id, prefix: id.split(":")[0] });
+    if (DEBUG) console.log("META HANDLER DEBUG:", { id, prefix: id.split(":")[0] });
 
     const parts = id.split(":");
     const prefix = parts[0];
@@ -405,7 +406,7 @@ builder.defineMetaHandler(async ({ id }) => {
       }
     }
 
-    console.log("META SERIES URL DEBUG:", {
+    if (DEBUG) console.log("META SERIES URL DEBUG:", {
       id,
       prefix,
       seriesUrl
@@ -421,7 +422,7 @@ builder.defineMetaHandler(async ({ id }) => {
       episodes = await siteEngine.getEpisodes(prefix, seriesUrl);
 
       if (!episodes.length) {
-        console.log("PHUMI2 META RETRY:", seriesUrl);
+        if (DEBUG) console.log("PHUMI2 META RETRY:", seriesUrl);
         await new Promise(resolve => setTimeout(resolve, 1200));
         episodes = await siteEngine.getEpisodes(prefix, seriesUrl);
       }
