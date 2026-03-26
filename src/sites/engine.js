@@ -137,29 +137,6 @@ async function getStreamDetail(postId) {
 }
 
 /* =========================
-   URL RESOLVER
-========================= */
-async function resolveEpisodeUrl(url) {
-  if (!url || typeof url !== "string") return null;
-
-  let resolvedUrl = url.trim();
-
-  if (resolvedUrl.includes("player.php")) {
-    const resolved = await resolvePlayerUrl(resolvedUrl);
-    if (!resolved) return null;
-    resolvedUrl = resolved;
-  }
-
-  if (resolvedUrl.includes("ok.ru/videoembed/")) {
-    const resolved = await resolveOkEmbed(resolvedUrl);
-    if (!resolved) return null;
-    resolvedUrl = resolved;
-  }
-
-  return resolvedUrl;
-}
-
-/* =========================
    BUILD EPISODES
 ========================= */
 function buildEpisodesFromUrls({
@@ -374,10 +351,29 @@ async function getEpisodes(prefix, seriesUrl) {
    STREAM
 ========================= */
 async function getStream(prefix, episodeUrl, episode) {
-  const url = await resolveEpisodeUrl(episodeUrl);
-  if (!url) return null;
+  let url = episodeUrl;
+  let forceProxyHeaders = false;
 
-  return buildStream(url, episode);
+  if (!url || typeof url !== "string") return null;
+
+  url = url.trim();
+
+  if (url.includes("player.php")) {
+    const resolved = await resolvePlayerUrl(url);
+    if (!resolved) return null;
+    url = resolved;
+  }
+
+  if (url.includes("ok.ru/videoembed/")) {
+    const resolved = await resolveOkEmbed(url);
+    if (!resolved) return null;
+    url = resolved;
+    forceProxyHeaders = true;
+  }
+
+  return buildStream(url, episode, undefined, "KhmerDub", "khmerdub", {
+    forceProxyHeaders
+  });
 }
 
 /* =========================
