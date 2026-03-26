@@ -371,7 +371,19 @@ async function getStream(prefix, episodeUrl, episode) {
     forceProxyHeaders = true;
   }
 
-  return buildStream(url, episode, undefined, "KhmerDub", "khmerdub", {
+  const providerNames = {
+    vip: "PhumiVIP",
+    sunday: "SundayDrama",
+    idrama: "iDramaHD",
+    khmerave: "KhmerAve",
+    merlkon: "Merlkon",
+    phumi2: "PhumiClub"
+  };
+
+  const providerName = providerNames[prefix] || "KhmerDub";
+  const groupName = prefix || "khmerdub";
+
+  return buildStream(url, episode, undefined, providerName, groupName, {
     forceProxyHeaders
   });
 }
