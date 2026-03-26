@@ -1,19 +1,15 @@
 const cheerio = require("cheerio");
 const axiosClient = require("../utils/fetch");
 const { URL_TO_POSTID, POST_INFO, BLOG_IDS } = require("../utils/cache");
-const { 
-  normalizePoster, 
-  extractVideoLinks, 
-  extractEpisodeNumber, 
-  isProbablyVideoUrl, 
-  extractMaxEpFromTitle, 
-  extractOkIds, 
-  uniqById 
+const {
+  normalizePoster,
+  extractVideoLinks,
+  extractEpisodeNumber,
+  isProbablyVideoUrl,
+  extractMaxEpFromTitle,
+  extractOkIds,
+  uniqById
 } = require("../utils/helpers");
-
-
-const FILE_REGEX =
-  /file\s*:\s*["'](https?:\/\/[^"']+\.mp4(?:\?[^"']+)?)["']/gi;  
 
 const {
   resolvePlayerUrl,
@@ -26,24 +22,21 @@ const {
 ========================= */
 async function getPostId(url) {
   if (URL_TO_POSTID.has(url)) {
-	  return URL_TO_POSTID.get(url);
+    return URL_TO_POSTID.get(url);
   }
 
   const { data } = await axiosClient.get(url);
   const $ = cheerio.load(data);
 
-  // VIP / iDrama
   let postId = $("#player").attr("data-post-id");
 
-  // SundayDrama
   if (!postId) {
     const fanta = $('div[id="fanta"][data-post-id]').first();
     if (fanta.length) {
       postId = fanta.attr("data-post-id");
     }
   }
-  
-  // SundayDrama fallback
+
   if (!postId) {
     const match = data.match(
       /blogger\.com\/feeds\/\d+\/posts\/default\/(\d+)\?alt=json/i
@@ -51,29 +44,27 @@ async function getPostId(url) {
     if (match) {
       postId = match[1];
     }
-  }  
+  }
 
   if (!postId) return null;
-  
-  // Extract max EP from title OR from SundayDrama "episode/END.xx"
+
   const pageTitle = $("title").text();
   let maxEp = extractMaxEpFromTitle(pageTitle);
 
-  // SundayDrama often has: <b>episode/END.70</b>
   if (!maxEp) {
     const epText =
       $('b:contains("episode/")').first().text() || "";
 
     const m = epText.match(/episode\/(?:END\.)?(\d+)/i);
     if (m) maxEp = parseInt(m[1], 10);
-  } 
+  }
 
   URL_TO_POSTID.set(url, postId);
 
   if (maxEp) {
     POST_INFO.set(postId, {
       ...(POST_INFO.get(postId) || {}),
-      maxEp,
+      maxEp
     });
   }
 
@@ -104,15 +95,14 @@ async function fetchFromBlog(blogId, postId) {
 
     let urls = extractVideoLinks(content).filter(isProbablyVideoUrl);
 
-    // If blogger post stores OK.ru IDs (like: 9488...; 9488...; {embed=ok})
     if (!urls.length) {
       const hasOkEmbed = /\{embed\s*=\s*ok\}/i.test(content);
       const okIds = extractOkIds(content);
 
       if (hasOkEmbed && okIds.length) {
-		urls = okIds
-		  .map(id => `https://ok.ru/videoembed/${id}`)
-		  .filter(isProbablyVideoUrl);
+        urls = okIds
+          .map(id => `https://ok.ru/videoembed/${id}`)
+          .filter(isProbablyVideoUrl);
       }
     }
 
@@ -132,90 +122,158 @@ async function getStreamDetail(postId) {
   if (cached?.detail) return cached.detail;
 
   const results = await Promise.all(
-    Object.values(BLOG_IDS).map(blogId =>
-      fetchFromBlog(blogId, postId)
-    )
+    Object.values(BLOG_IDS).map(blogId => fetchFromBlog(blogId, postId))
   );
 
   const detail = results.find(Boolean);
-  if (!detail) {
-    return null;
-  }
+  if (!detail) return null;
 
-  POST_INFO.set(postId, { ...(POST_INFO.get(postId) || {}), detail });
+  POST_INFO.set(postId, {
+    ...(POST_INFO.get(postId) || {}),
+    detail
+  });
 
   return detail;
 }
 
 /* =========================
-   EPISODES
+   URL RESOLVER
 ========================= */
-async function getEpisodes(prefix, seriesUrl) {
-  const postId = await getPostId(seriesUrl);
+async function resolveEpisodeUrl(url) {
+  if (!url || typeof url !== "string") return null;
 
-  // Sunday playlist
-  if (!postId && prefix === "sunday") {
-    const { data } = await axiosClient.get(seriesUrl);
+  let resolvedUrl = url.trim();
 
-    FILE_REGEX.lastIndex = 0;
+  if (resolvedUrl.includes("player.php")) {
+    const resolved = await resolvePlayerUrl(resolvedUrl);
+    if (!resolved) return null;
+    resolvedUrl = resolved;
+  }
 
-    const urls = [];
-    let match;
+  if (resolvedUrl.includes("ok.ru/videoembed/")) {
+    const resolved = await resolveOkEmbed(resolvedUrl);
+    if (!resolved) return null;
+    resolvedUrl = resolved;
+  }
 
-    while ((match = FILE_REGEX.exec(data)) !== null) {
-      urls.push(match[1]);
+  return resolvedUrl;
+}
+
+/* =========================
+   BUILD EPISODES
+========================= */
+function buildEpisodesFromUrls({
+  prefix,
+  seriesUrl,
+  urls,
+  title,
+  thumbnail,
+  maxEp = null
+}) {
+  const seen = new Set();
+  let episodes = [];
+
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    const ep = extractEpisodeNumber(url, i, maxEp);
+
+    if (!Number.isFinite(ep) || ep <= 0) continue;
+    if (seen.has(ep)) continue;
+
+    seen.add(ep);
+    episodes.push({ url, ep });
+  }
+
+  episodes.sort((a, b) => a.ep - b.ep);
+
+  if (maxEp && prefix !== "sunday") {
+    episodes = episodes.filter(item => item.ep <= maxEp);
+  }
+
+  return episodes.map(({ url, ep }) => ({
+    id: ep,
+    url,
+    title: title || `Episode ${ep}`,
+    season: 1,
+    episode: ep,
+    thumbnail: thumbnail || "",
+    released: new Date().toISOString(),
+    behaviorHints: {
+      group: `${prefix}:${encodeURIComponent(seriesUrl)}`
     }
+  }));
+}
 
-    const uniqueUrls = [...new Set(urls)].filter(isProbablyVideoUrl);
+/* =========================
+   SUNDAY: PAGE EPISODES
+========================= */
+async function getSundayEpisodesFromPage(seriesUrl) {
+  try {
+    const { data } = await axiosClient.get(seriesUrl);
+    const $ = cheerio.load(data);
+
+    const rawUrls = extractVideoLinks(data).filter(isProbablyVideoUrl);
+    const uniqueUrls = [...new Set(rawUrls)];
+
     if (!uniqueUrls.length) return [];
 
-    const $ = cheerio.load(data);
     const pagePoster =
       $("meta[property='og:image']").attr("content") ||
       $("link[rel='image_src']").attr("href") ||
+      $("meta[name='twitter:image']").attr("content") ||
       "";
 
     const normalizedPoster = normalizePoster(pagePoster || "");
 
-    const episodes = [];
-    const seen = new Set();
+    const pageTitle =
+      $("meta[property='og:title']").attr("content") ||
+      $("title").text().trim() ||
+      "KhmerDub";
 
-    for (let i = 0; i < uniqueUrls.length; i++) {
-      const url = uniqueUrls[i];
-      const epNum = extractEpisodeNumber(url, i);
+    const pageMaxEp =
+      extractMaxEpFromTitle(pageTitle) ||
+      (() => {
+        const epText = $('b:contains("episode/")').first().text() || "";
+        const m = epText.match(/episode\/(?:END\.)?(\d+)/i);
+        return m ? parseInt(m[1], 10) : null;
+      })();
 
-      if (seen.has(epNum)) continue;
-      seen.add(epNum);
+    const episodes = buildEpisodesFromUrls({
+      prefix: "sunday",
+      seriesUrl,
+      urls: uniqueUrls,
+      title: pageTitle,
+      thumbnail: normalizedPoster,
+      maxEp: null
+    });
 
-      episodes.push({
-        id: epNum,
-        url,
-        title: `Episode ${epNum}`,
-        season: 1,
-        episode: epNum,
-        thumbnail: normalizedPoster,
-        released: new Date().toISOString(),
-        behaviorHints: {
-          group: `${prefix}:${encodeURIComponent(seriesUrl)}`
-        }
-      });
+    if (!episodes.length) return [];
+
+    if (pageMaxEp && Number.isInteger(pageMaxEp)) {
+      const postId = URL_TO_POSTID.get(seriesUrl);
+      if (postId) {
+        POST_INFO.set(postId, {
+          ...(POST_INFO.get(postId) || {}),
+          maxEp: pageMaxEp
+        });
+      }
     }
 
-    episodes.sort((a, b) => a.episode - b.episode);
     return episodes;
+  } catch {
+    return [];
   }
+}
 
-  // =========================
-  // No postId
-  // =========================
+/* =========================
+   SUNDAY: BLOGGER EPISODES
+========================= */
+async function getSundayEpisodesFromBlogger(seriesUrl, postId) {
   if (!postId) return [];
 
   const detail = await getStreamDetail(postId);
   if (!detail) return [];
 
-  // =========================
-  // Get max episode
-  // =========================
   let maxEp = POST_INFO.get(postId)?.maxEp || null;
 
   console.log("MAX EP DEBUG:", {
@@ -224,7 +282,6 @@ async function getEpisodes(prefix, seriesUrl) {
     maxEp
   });
 
-  // fallback from title
   if (!maxEp && detail?.title) {
     const extracted = extractMaxEpFromTitle(detail.title);
     if (extracted) {
@@ -237,101 +294,90 @@ async function getEpisodes(prefix, seriesUrl) {
     }
   }
 
-  let episodes = [];
-
-  // =========================
-  // VIP / iDrama
-  // =========================
-  if (prefix === "vip" || prefix === "idrama") {
-    const seen = new Set();
-
-    for (let i = 0; i < detail.urls.length; i++) {
-      const url = detail.urls[i];
-      const ep = extractEpisodeNumber(url, i, maxEp);
-
-      if (seen.has(ep)) continue;
-      seen.add(ep);
-
-      episodes.push({ url, ep });
-    }
-
-    episodes.sort((a, b) => a.ep - b.ep);
-
-    if (maxEp) {
-      episodes = episodes.filter(item => item.ep <= maxEp);
-    }
-  }
-
-  // =========================
-  // KhmerAve / others
-  // =========================
-  else {
-    const seen = new Set();
-
-    for (let i = 0; i < detail.urls.length; i++) {
-      const url = detail.urls[i];
-      const ep = extractEpisodeNumber(url, i, maxEp);
-
-      if (seen.has(ep)) continue;
-      seen.add(ep);
-
-      episodes.push({ url, ep });
-    }
-
-    episodes.sort((a, b) => a.ep - b.ep);
-
-    if (maxEp) {
-      episodes = episodes.filter(item => item.ep <= maxEp);
-    }
-  }
+  const episodes = buildEpisodesFromUrls({
+    prefix: "sunday",
+    seriesUrl,
+    urls: detail.urls,
+    title: detail.title,
+    thumbnail: detail.thumbnail,
+    maxEp: null
+  });
 
   console.log("FINAL MAX EP:", maxEp);
   console.log("FINAL EP COUNT:", episodes.length);
 
-  return episodes.map(({ url, ep }) => ({
-    id: ep,
-    url,
-    title: detail.title,
-    season: 1,
-    episode: ep,
-    thumbnail: detail.thumbnail,
-    released: new Date().toISOString(),
-    behaviorHints: {
-      group: `${prefix}:${encodeURIComponent(seriesUrl)}`
+  return episodes;
+}
+
+/* =========================
+   EPISODES
+========================= */
+async function getEpisodes(prefix, seriesUrl) {
+  const postId = await getPostId(seriesUrl);
+
+  if (prefix === "sunday") {
+    const pageEpisodes = await getSundayEpisodesFromPage(seriesUrl);
+    if (pageEpisodes.length) {
+      console.log("SUNDAY PAGE EPISODES:", pageEpisodes.length);
+      return pageEpisodes;
     }
-  }));
+
+    const bloggerEpisodes = await getSundayEpisodesFromBlogger(seriesUrl, postId);
+    if (bloggerEpisodes.length) {
+      return bloggerEpisodes;
+    }
+
+    return [];
+  }
+
+  if (!postId) return [];
+
+  const detail = await getStreamDetail(postId);
+  if (!detail) return [];
+
+  let maxEp = POST_INFO.get(postId)?.maxEp || null;
+
+  console.log("MAX EP DEBUG:", {
+    postId,
+    stored: POST_INFO.get(postId),
+    maxEp
+  });
+
+  if (!maxEp && detail?.title) {
+    const extracted = extractMaxEpFromTitle(detail.title);
+    if (extracted) {
+      maxEp = extracted;
+
+      POST_INFO.set(postId, {
+        ...(POST_INFO.get(postId) || {}),
+        maxEp
+      });
+    }
+  }
+
+  const episodes = buildEpisodesFromUrls({
+    prefix,
+    seriesUrl,
+    urls: detail.urls,
+    title: detail.title,
+    thumbnail: detail.thumbnail,
+    maxEp
+  });
+
+  console.log("FINAL MAX EP:", maxEp);
+  console.log("FINAL EP COUNT:", episodes.length);
+
+  return episodes;
 }
 
 /* =========================
    STREAM
 ========================= */
 async function getStream(prefix, episodeUrl, episode) {
+  const url = await resolveEpisodeUrl(episodeUrl);
+  if (!url) return null;
 
-  // Sunday URL
-  if (prefix === "sunday") {
-    const stream = buildStream(episodeUrl, episode);
-    return stream;
-  }
-
-  // Other sites
-  let url = episodeUrl;
-
-  // Resolve player.php
-  if (url.includes("player.php")) {
-    const resolved = await resolvePlayerUrl(url);
-    if (!resolved) return null;
-    url = resolved;
-  }
-
-  // Resolve OK embed
-  if (url.includes("ok.ru/videoembed/")) {
-    const resolved = await resolveOkEmbed(url);
-    if (!resolved) return null;
-    url = resolved;
-  }
-
-  const stream = buildStream(url, episode);
-  return stream;
+  return buildStream(url, episode);
 }
 
 /* =========================
@@ -339,7 +385,6 @@ async function getStream(prefix, episodeUrl, episode) {
 ========================= */
 async function getCatalogItems(prefix, siteConfig, url) {
   try {
-    // === Sunday Blogger Pagination Support ===
     if (prefix === "sunday") {
       const allItems = [];
       let currentUrl = url;
@@ -390,7 +435,7 @@ async function getCatalogItems(prefix, siteConfig, url) {
           allItems.push({
             id: link.trim(),
             name: title,
-            poster: normalizePoster(poster),
+            poster: normalizePoster(poster)
           });
         }
 
@@ -445,7 +490,7 @@ async function getCatalogItems(prefix, siteConfig, url) {
       return {
         id: link.trim(),
         name: title,
-        poster: normalizePoster(poster),
+        poster: normalizePoster(poster)
       };
     });
 
@@ -459,5 +504,5 @@ async function getCatalogItems(prefix, siteConfig, url) {
 module.exports = {
   getCatalogItems,
   getEpisodes,
-  getStream,
+  getStream
 };
