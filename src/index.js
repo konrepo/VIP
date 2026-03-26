@@ -1,3 +1,5 @@
+// index.js
+
 const { addonBuilder, serveHTTP } = require("stremio-addon-sdk");
 const manifest = require("./manifest");
 
@@ -13,7 +15,7 @@ const axiosClient = require("./utils/fetch");
 const cheerio = require("cheerio");
 const { normalizePoster, mapMetas, uniqById } = require("./utils/helpers");
 
-const { makeMetaId } = require("./utils/hash");
+//const { makeMetaId } = require("./utils/hash");
 const { URL_CACHE, EP_CACHE, CATALOG_CACHE } = require("./utils/cache");
 
 function applyMetaId(items, prefix) {
