@@ -702,19 +702,47 @@ async function getStream(prefix, episodeUrl, episode) {
   let url = episodeUrl;
   let forceProxyHeaders = false;
 
-  if (!url || typeof url !== "string") return null;
+  console.log("[getStream] input:", {
+    prefix,
+    episode,
+    episodeUrl
+  });
+
+  if (!url || typeof url !== "string") {
+    console.log("[getStream] invalid url:", url);
+    return null;
+  }
 
   url = url.trim();
+  console.log("[getStream] trimmed url:", url);
 
   if (url.includes("player.php")) {
+    console.log("[getStream] resolving player.php:", url);
+
     const resolved = await resolvePlayerUrl(url);
-    if (!resolved) return null;
+
+    console.log("[getStream] resolvePlayerUrl result:", resolved);
+
+    if (!resolved) {
+      console.log("[getStream] resolvePlayerUrl failed");
+      return null;
+    }
+
     url = resolved;
   }
 
   if (url.includes("ok.ru/videoembed/")) {
+    console.log("[getStream] resolving ok.ru:", url);
+
     const resolved = await resolveOkEmbed(url);
-    if (!resolved) return null;
+
+    console.log("[getStream] resolveOkEmbed result:", resolved);
+
+    if (!resolved) {
+      console.log("[getStream] resolveOkEmbed failed");
+      return null;
+    }
+
     url = resolved;
     forceProxyHeaders = true;
   }
@@ -731,9 +759,13 @@ async function getStream(prefix, episodeUrl, episode) {
   const providerName = providerNames[prefix] || "KhmerDub";
   const groupName = prefix || "khmerdub";
 
-  return buildStream(url, episode, undefined, providerName, groupName, {
+  const stream = buildStream(url, episode, undefined, providerName, groupName, {
     forceProxyHeaders
   });
+
+  console.log("[getStream] final stream:", stream);
+
+  return stream;
 }
 
 /* =========================
