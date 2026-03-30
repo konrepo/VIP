@@ -26,15 +26,6 @@ const PLAYER_REGEX =
 const FILE_REGEX =
   /file\s*:\s*["'](https?:\/\/[^"']+\.mp4(?:\?[^"']+)?)["']/gi;
 
-const IFRAME_SRC_REGEX =
-  /<iframe[^>]+src=["']([^"']+)["']/gi;
-
-const ESCAPED_IFRAME_SRC_REGEX =
-  /src\\?u003d\\?["'](https?:\/\/[^"'\\]+)["']/gi;
-
-const RAW_SPECIAL_URL_REGEX =
-  /https?:\/\/(?:www\.)?(?:dailymotion\.com\/(?:embed\/video|video)\/[a-zA-Z0-9]+|drive\.google\.com\/(?:file\/d\/[a-zA-Z0-9_-]+\/(?:preview|view)|open\?id=[a-zA-Z0-9_-]+|uc\?(?:export=download&)?id=[a-zA-Z0-9_-]+)|player\.vimeo\.com\/video\/\d+|vimeo\.com\/\d+)/gi;
-
 function extractEpisodeNumber(url, index = 0, maxEp = null) {
   if (!url || typeof url !== "string") return index + 1;
 
@@ -68,25 +59,21 @@ function isProbablyVideoUrl(url) {
   return (
     /\.m3u8(\?|$)/i.test(url) ||
     /\.mp4(\?|$)/i.test(url) ||
-    /ok\.ru\/(?:videoembed|video)\//i.test(url) ||
+    /ok\.ru\/videoembed\//i.test(url) ||
     /phumikhmer\.vip\/player\.php\?(?:id|stream)=/i.test(url) ||
-    /sooplive\.co\.kr/i.test(url) ||
-    /dailymotion\.com\/(?:embed\/video|video)\//i.test(url) ||
-    /drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=download&)?id=)/i.test(url) ||
-    /player\.vimeo\.com\/video\//i.test(url) ||
-    /vimeo\.com\/\d+/i.test(url)
+    /sooplive\.co\.kr/i.test(url)
   );
 }
 
 function extractVideoLinks(text) {
   if (!text) return [];
-
-  const directMatches = text.match(DIRECT_REGEX) || [];
+  const directMatches = text.match(DIRECT_REGEX) || [];  
   const okMatches = (text.match(OK_REGEX) || [])
-    .map((u) => u.replace("/video/", "/videoembed/"));
+    .map(u => u.replace("/video/", "/videoembed/"));
   const playerMatches = text.match(PLAYER_REGEX) || [];
-
+  
   FILE_REGEX.lastIndex = 0;
+
   const fileMatches = [];
   let match;
   while ((match = FILE_REGEX.exec(text)) !== null) {
@@ -99,61 +86,8 @@ function extractVideoLinks(text) {
     ...playerMatches,
     ...fileMatches
   ]))
-    .map((u) => u.trim())
+    .map(u => u.trim())
     .filter(isProbablyVideoUrl);
-}
-
-function extractSpecialEmbedUrls(text) {
-  if (!text || typeof text !== "string") return [];
-
-  const urls = [];
-  let match;
-
-  const tokenPatterns = [
-    {
-      re: /\{ok\s*=\s*([0-9]{6,})\}/gi,
-      map: (id) => `https://ok.ru/videoembed/${id}`
-    },
-    {
-      re: /\{dm\s*=\s*([a-zA-Z0-9]+)\}/gi,
-      map: (id) => `https://www.dailymotion.com/embed/video/${id}`
-    },
-    {
-      re: /\{gd\s*=\s*([a-zA-Z0-9_-]+)\}/gi,
-      map: (id) => `https://drive.google.com/file/d/${id}/preview`
-    },
-    {
-      re: /\{GDEmk\s*=\s*([a-zA-Z0-9_-]+)\}/gi,
-      map: (id) => `https://drive.google.com/file/d/${id}/preview`
-    }
-  ];
-
-  for (const { re, map } of tokenPatterns) {
-    re.lastIndex = 0;
-    while ((match = re.exec(text)) !== null) {
-      urls.push(map(match[1]));
-    }
-  }
-
-  IFRAME_SRC_REGEX.lastIndex = 0;
-  while ((match = IFRAME_SRC_REGEX.exec(text)) !== null) {
-    urls.push(match[1]);
-  }
-
-  ESCAPED_IFRAME_SRC_REGEX.lastIndex = 0;
-  while ((match = ESCAPED_IFRAME_SRC_REGEX.exec(text)) !== null) {
-    urls.push(match[1]);
-  }
-
-  const rawSpecialMatches = text.match(RAW_SPECIAL_URL_REGEX) || [];
-  urls.push(...rawSpecialMatches);
-
-  return [...new Set(
-    urls
-      .map((u) => String(u || "").trim())
-      .map((u) => u.replace(/^http:/i, "https:"))
-      .map((u) => u.replace(/\/video\/(\d+)/i, "/videoembed/$1"))
-  )].filter(isProbablyVideoUrl);
 }
 
 function extractMaxEpFromTitle(title) {
@@ -171,6 +105,7 @@ function extractMaxEpFromTitle(title) {
 function extractOkIds(text) {
   if (!text) return [];
 
+  // matches long numeric ids followed by semicolon or newline
   const idRegex = /(^|[\s;])(\d{10,})(?=\s*;|\s|$)/g;
 
   const ids = [];
@@ -193,7 +128,7 @@ function mapMetas(items, type = "series") {
 }
 
 function uniqById(items) {
-  return [...new Map(items.map((item) => [item.id, item])).values()];
+  return [...new Map(items.map(item => [item.id, item])).values()];
 }
 
 module.exports = {
@@ -201,7 +136,6 @@ module.exports = {
   extractEpisodeNumber,
   isProbablyVideoUrl,
   extractVideoLinks,
-  extractSpecialEmbedUrls,
   extractMaxEpFromTitle,
   extractOkIds,
   mapMetas,
