@@ -6,6 +6,7 @@ const {
   extractVideoLinks,
   extractEpisodeNumber,
   isProbablyVideoUrl,
+  extractSpecialEmbedUrls,
   extractMaxEpFromTitle,
   extractOkIds,
   uniqById
@@ -18,70 +19,6 @@ const {
 } = require("../utils/streamResolvers");
 
 const DEBUG = false;
-
-/* =========================
-   VIP BLOGGER CONTENT PARSER
-========================= */
-function parseVipBloggerContent(content = "") {
-  const urls = [];
-  const okIds = [];
-
-  urls.push(...extractVideoLinks(content));
-
-  let match;
-
-  const dmRegex = /\{dm=(\w+)\}/gi;
-  while ((match = dmRegex.exec(content)) !== null) {
-    urls.push(`https://www.dailymotion.com/embed/video/${match[1]}`);
-  }
-
-  const gdRegex = /\{gd=(\w+)\}/gi;
-  while ((match = gdRegex.exec(content)) !== null) {
-    urls.push(`https://drive.google.com/file/d/${match[1]}/preview`);
-  }
-
-  const okRegex = /\{ok=(\w+)\}/gi;
-  while ((match = okRegex.exec(content)) !== null) {
-    okIds.push(match[1]);
-  }
-
-  if (/\{embed\s*=\s*ok\}/i.test(content)) {
-    okIds.forEach((id) => {
-      urls.push(`https://ok.ru/videoembed/${id}`);
-    });
-  }
-
-  const parts = content
-    .split(";")
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  for (const part of parts) {
-    if (/^https?:\/\//i.test(part)) {
-      urls.push(part);
-      continue;
-    }
-
-    const dm = part.match(/\{dm=(\w+)\}/i);
-    if (dm) {
-      urls.push(`https://www.dailymotion.com/embed/video/${dm[1]}`);
-      continue;
-    }
-
-    const gd = part.match(/\{gd=(\w+)\}/i);
-    if (gd) {
-      urls.push(`https://drive.google.com/file/d/${gd[1]}/preview`);
-      continue;
-    }
-
-    const ok = part.match(/\{ok=(\w+)\}/i);
-    if (ok) {
-      urls.push(`https://ok.ru/videoembed/${ok[1]}`);
-    }
-  }
-
-  return [...new Set(urls)].filter(isProbablyVideoUrl);
-}
 
 /* =========================
    VIP SEARCH HELPERS
@@ -140,7 +77,7 @@ async function findVipBloggerDetailBySearch(seriesUrl, postId) {
   const targetSlug = cached.slug || "";
   const targetTitle = cached.cleanTitle || "";
 
-  const vipBlogs = [BLOG_IDS.ONELEGEND, BLOG_IDS.KOLAB];
+  const vipBlogs = [BLOG_IDS.ONELEGEND, BLOG_IDS.KOLAB].filter(Boolean);
   const queries = [...new Set([targetSlug, targetTitle].filter(Boolean))];
 
   let best = null;
@@ -161,20 +98,25 @@ async function findVipBloggerDetailBySearch(seriesUrl, postId) {
         const score = scoreCandidate(title, entrySlug, targetTitle, targetSlug);
         if (score < 30) continue;
 
-        const urls = parseVipBloggerContent(content);
+        const urls = [
+          ...extractVideoLinks(content),
+          ...extractSpecialEmbedUrls(content)
+        ]
+          .filter(isProbablyVideoUrl);
+
         if (!urls.length) continue;
 
         const $content = cheerio.load(content);
         const thumbnail = normalizePoster(
           $content("img").first().attr("src") ||
-          entry.media$thumbnail?.url ||
+          entry?.media$thumbnail?.url ||
           ""
         );
 
         const candidate = {
           title,
           thumbnail,
-          urls,
+          urls: [...new Set(urls)],
           score
         };
 
@@ -211,16 +153,15 @@ async function getPostId(url) {
 
   const $ = cheerio.load(data);
 
-  let postId = null;
+  let postId = $("#player").attr("data-post-id");
   let sourceType = null;
 
-  // 1. Original Nuvio / Blogger player path
-  postId = $("#player").attr("data-post-id");
+  /* 1. ORIGINAL NUVIO PRIORITY: Blogger player */
   if (postId) {
     sourceType = "blogger";
   }
 
-  // 2. SundayDrama blogger path
+  /* 2. SundayDrama fallback */
   if (!postId) {
     const fanta = $('div[id="fanta"][data-post-id]').first();
     if (fanta.length) {
@@ -229,7 +170,7 @@ async function getPostId(url) {
     }
   }
 
-  // 3. Blogger feed fallback from page source
+  /* 3. Blogger feed URL fallback */
   if (!postId) {
     const match = data.match(
       /blogger\.com\/feeds\/\d+\/posts\/default\/(\d+)\?alt=json/i
@@ -240,7 +181,7 @@ async function getPostId(url) {
     }
   }
 
-  // 4. VIP WordPress fallback ONLY if no blogger postId was found
+  /* 4. VIP WordPress fallback only when Blogger path not found */
   if (!postId) {
     let match = null;
 
@@ -283,15 +224,11 @@ async function getPostId(url) {
   }
 
   const urlObj = new URL(url);
-  const slug =
-    urlObj.pathname
-      .split("/")
-      .filter(Boolean)
-      .pop() || "";
+  const slug = urlObj.pathname.split("/").filter(Boolean).pop() || "";
 
   const cleanTitle =
     $("meta[property='og:title']").attr("content") ||
-    $("h1.entry-title, h1.post-title, h1.single-post-title, .post-title, title")
+    $("h1.entry-title, h1.post-title, h1.single-post-title, h1 .post-title")
       .first()
       .text()
       .trim() ||
@@ -318,17 +255,10 @@ async function fetchFromBlog(blogId, postId) {
   const feedUrl = `https://www.blogger.com/feeds/${blogId}/posts/default/${postId}?alt=json`;
 
   try {
-    const { data } = await axiosClient.get(feedUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        Referer: "https://phumikhmer.vip/"
-      }
-    });
+    const { data } = await axiosClient.get(feedUrl);
 
     const title = data?.entry?.title?.$t || "";
     const content = data?.entry?.content?.$t || "";
-    if (!content) return null;
-
     const $content = cheerio.load(content);
 
     let thumbnail =
@@ -340,7 +270,10 @@ async function fetchFromBlog(blogId, postId) {
 
     thumbnail = normalizePoster(thumbnail);
 
-    let urls = parseVipBloggerContent(content);
+    let urls = [
+      ...extractVideoLinks(content),
+      ...extractSpecialEmbedUrls(content)
+    ].filter(isProbablyVideoUrl);
 
     if (!urls.length) {
       const hasOkEmbed = /\{embed\s*=\s*ok\}/i.test(content);
@@ -355,14 +288,18 @@ async function fetchFromBlog(blogId, postId) {
 
     if (!urls.length) return null;
 
-    return { title, thumbnail, urls };
+    return {
+      title,
+      thumbnail,
+      urls: [...new Set(urls)]
+    };
   } catch {
     return null;
   }
 }
 
 /* =========================
-   FETCH VIP WORDPRESS
+   VIP WORDPRESS FETCH
 ========================= */
 async function fetchVipWordpressDetail(seriesUrl, postId) {
   const cached = POST_INFO.get(postId) || {};
@@ -381,9 +318,11 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
   const $ = cheerio.load(pageHtml);
 
   const pageTitle =
-    $("h1.single-post-title .post-title").text().trim() ||
-    $("h1.single-post-title").text().trim() ||
     $("meta[property='og:title']").attr("content") ||
+    $("h1.entry-title, h1.post-title, h1.single-post-title, h1 .post-title")
+      .first()
+      .text()
+      .trim() ||
     $("title").text().trim();
 
   let thumbnail =
@@ -395,8 +334,12 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
 
   thumbnail = normalizePoster(thumbnail);
 
-  // 1. direct page scan
-  let urls = extractVideoLinks(pageHtml).filter(isProbablyVideoUrl);
+  /* 1. direct page scan */
+  let urls = [
+    ...extractVideoLinks(pageHtml),
+    ...extractSpecialEmbedUrls(pageHtml)
+  ].filter(isProbablyVideoUrl);
+
   if (urls.length) {
     return {
       title: pageTitle,
@@ -405,13 +348,17 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
     };
   }
 
-  // 2. inline scripts scan
+  /* 2. script scan */
   const scripts = $("script")
     .map((_, el) => $(el).html() || "")
     .get()
     .join("\n");
 
-  urls = extractVideoLinks(scripts).filter(isProbablyVideoUrl);
+  urls = [
+    ...extractVideoLinks(scripts),
+    ...extractSpecialEmbedUrls(scripts)
+  ].filter(isProbablyVideoUrl);
+
   if (urls.length) {
     return {
       title: pageTitle,
@@ -420,7 +367,7 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
     };
   }
 
-  // 3. wp-json post content scan
+  /* 3. wp-json scan */
   try {
     const wpApiUrl = `https://phumikhmer.vip/wp-json/wp/v2/posts/${postId}`;
     const { data: wpPost } = await axiosClient.get(wpApiUrl, {
@@ -431,7 +378,10 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
     });
 
     const rendered = wpPost?.content?.rendered || "";
-    const restUrls = extractVideoLinks(rendered).filter(isProbablyVideoUrl);
+    const restUrls = [
+      ...extractVideoLinks(rendered),
+      ...extractSpecialEmbedUrls(rendered)
+    ].filter(isProbablyVideoUrl);
 
     if (restUrls.length) {
       return {
@@ -442,7 +392,7 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
     }
   } catch {}
 
-  // 4. blogger search fallback
+  /* 4. search blogger fallback */
   const searched = await findVipBloggerDetailBySearch(seriesUrl, postId);
   if (searched) {
     if (!searched.thumbnail && thumbnail) {
@@ -464,14 +414,31 @@ async function getStreamDetail(postId, seriesUrl = "") {
   const sourceType = cached?.sourceType || "blogger";
   let detail = null;
 
-  if (sourceType === "vip-wordpress") {
-    detail = await fetchVipWordpressDetail(seriesUrl, postId);
-  } else {
+  /* keep original Nuvio Blogger behavior first */
+  if (sourceType === "blogger") {
     const results = await Promise.all(
       Object.values(BLOG_IDS).map((blogId) => fetchFromBlog(blogId, postId))
     );
 
     detail = results.find(Boolean);
+
+    /* if somehow blogger fetch failed, allow wordpress fallback */
+    if (!detail && seriesUrl) {
+      detail = await fetchVipWordpressDetail(seriesUrl, postId);
+    }
+  } else if (sourceType === "vip-wordpress") {
+    /* WordPress page may still map to blogger content, so try blogger first */
+    const results = await Promise.all(
+      Object.values(BLOG_IDS).map((blogId) => fetchFromBlog(blogId, postId))
+    );
+
+    detail = results.find(Boolean);
+
+    if (!detail && seriesUrl) {
+      detail = await fetchVipWordpressDetail(seriesUrl, postId);
+    }
+  } else if (seriesUrl) {
+    detail = await fetchVipWordpressDetail(seriesUrl, postId);
   }
 
   if (!detail) return null;
@@ -537,7 +504,11 @@ async function getSundayEpisodesFromPage(seriesUrl) {
     const { data } = await axiosClient.get(seriesUrl);
     const $ = cheerio.load(data);
 
-    const rawUrls = extractVideoLinks(data).filter(isProbablyVideoUrl);
+    const rawUrls = [
+      ...extractVideoLinks(data),
+      ...extractSpecialEmbedUrls(data)
+    ].filter(isProbablyVideoUrl);
+
     const uniqueUrls = [...new Set(rawUrls)];
 
     if (!uniqueUrls.length) return [];
