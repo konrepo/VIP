@@ -1,4 +1,3 @@
-<<<<<<< HEAD:src/addons/KhmerNuv/utils/streamResolvers.js
 const axiosClient = require("./fetch");
 
 /* =========================

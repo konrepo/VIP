@@ -1,4 +1,3 @@
-<<<<<<< HEAD:src/addons/KhmerNuv/sites/phumi2.js
 // phumi2.js
 
 const cheerio = require("cheerio");
