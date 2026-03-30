@@ -184,6 +184,13 @@ async function getPostId(url) {
     pageHtml: data
   });
 
+  console.log("[POSTID]", {
+    url,
+    postId,
+    sourceType,
+    maxEp
+  });
+
   return postId;
 }
 
@@ -285,7 +292,11 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
   const vipBlogs = [BLOG_IDS.ONELEGEND, BLOG_IDS.KOLAB];
 
   const entries = await Promise.all(
-    vipBlogs.map((blogId) => fetchBloggerJson(blogId, postId))
+    vipBlogs.map(async (blogId) => {
+      const entry = await fetchBloggerJson(blogId, postId);
+       console.log("[VIP] blogId:", blogId, "postId:", postId, "found:", !!entry);
+       return entry;
+    })
   );
 
   for (const entry of entries) {
@@ -294,7 +305,12 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
     const title = entry.title?.$t || pageTitle;
     const content = entry.content?.$t || "";
 
+    console.log("[VIP] entry title:", title);
+    console.log("[VIP] content preview:", content.slice(0, 1000));
+
     const urls = parseVipBloggerContent(content);
+    console.log("[VIP] parsed urls:", urls);
+
     if (!urls.length) continue;
 
     if (!thumbnail) {
@@ -392,6 +408,14 @@ async function getEpisodes(prefix, seriesUrl) {
   }
 
   const detail = await getStreamDetail(postId, seriesUrl);
+  
+  console.log("[EPISODES]", {
+    prefix,
+    seriesUrl,
+    postId,
+    detail
+  });
+
 
   if (!detail) {
     return [];
