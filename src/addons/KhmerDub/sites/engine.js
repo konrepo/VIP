@@ -19,7 +19,7 @@ const {
 } = require("../utils/streamResolvers");
 
 /* =========================
-   VIP / iDRAMA BLOGGER CONTENT PARSER
+   VIP / IDRAMA BLOGGER CONTENT
 ========================= */
 function parseVipBloggerContent(content = "") {
   const urls = [];
@@ -101,67 +101,68 @@ async function getPostId(url) {
 
   let postId = null;
   let sourceType = null;
+  let playerPostId = null;
+  let wpPostId = null;
 
-  // Blogger player id (VIP / iDrama / old hybrid pages)
-  postId = $("#player").attr("data-post-id");
-  if (postId) {
-    sourceType = "blogger";
-  }
+  // 1) Prefer player[data-post-id] first
+  playerPostId = $("#player").attr("data-post-id") || null;
 
-  // SundayDrama
-  if (!postId) {
+  if (!playerPostId) {
     const fanta = $('div[id="fanta"][data-post-id]').first();
     if (fanta.length) {
-      postId = fanta.attr("data-post-id");
-      sourceType = "blogger";
+      playerPostId = fanta.attr("data-post-id");
     }
   }
 
-  // Old Blogger feed fallback
-  if (!postId) {
+  if (!playerPostId) {
     const match = data.match(
       /blogger\.com\/feeds\/\d+\/posts\/default\/(\d+)\?alt=json/i
     );
     if (match) {
-      postId = match[1];
-      sourceType = "blogger";
+      playerPostId = match[1];
     }
   }
 
-  // WordPress fallback (VIP / iDrama)
-  if (!postId) {
-    let m = null;
+  // 2) WordPress post id fallback / metadata
+  let m = null;
 
-    const shortlink = $('link[rel="shortlink"]').attr("href") || "";
-    m = shortlink.match(/[?&]p=(\d+)/i);
+  const shortlink = $('link[rel="shortlink"]').attr("href") || "";
+  m = shortlink.match(/[?&]p=(\d+)/i);
 
-    if (!m) {
-      const apiLink =
-        $('link[rel="alternate"][type="application/json"]').attr("href") || "";
-      m = apiLink.match(/\/wp-json\/wp\/v2\/posts\/(\d+)/i);
+  if (!m) {
+    const apiLink =
+      $('link[rel="alternate"][type="application/json"]').attr("href") || "";
+    m = apiLink.match(/\/wp-json\/wp\/v2\/posts\/(\d+)/i);
+  }
+
+  if (!m) {
+    const articleId = $("article[id^='post-']").attr("id") || "";
+    m = articleId.match(/^post-(\d+)$/i);
+  }
+
+  if (!m) {
+    const imgPostId = $("img[post-id]").first().attr("post-id");
+    if (imgPostId) {
+      m = [, imgPostId];
     }
+  }
 
-    if (!m) {
-      const articleId = $("article[id^='post-']").attr("id") || "";
-      m = articleId.match(/^post-(\d+)$/i);
+  if (m) {
+    wpPostId = m[1];
+  }
+
+  // 3) Decide main postId + sourceType
+  if (playerPostId) {
+    postId = playerPostId;
+
+    if (wpPostId) {
+      sourceType = "wp-blogger";
+    } else {
+      sourceType = "blogger";
     }
-
-    if (!m) {
-      const imgPostId = $("img[post-id]").first().attr("post-id");
-      if (imgPostId) {
-        m = [, imgPostId];
-      }
-    }
-
-    if (m) {
-      postId = m[1];
-
-      if (/idramahd\.com/i.test(url)) {
-        sourceType = "idrama-wordpress";
-      } else {
-        sourceType = "vip-wordpress";
-      }
-    }
+  } else if (wpPostId) {
+    postId = wpPostId;
+    sourceType = "vip-wordpress";
   }
 
   if (!postId) return null;
@@ -170,14 +171,9 @@ async function getPostId(url) {
   let maxEp = extractMaxEpFromTitle(pageTitle);
 
   if (!maxEp) {
-    const h1Text = $("h1.entry-title, h1.single-post-title, h1").first().text().trim();
-    maxEp = extractMaxEpFromTitle(h1Text);
-  }
-
-  if (!maxEp) {
     const epText = $('b:contains("episode/")').first().text() || "";
-    const m = epText.match(/episode\/(?:END\.)?(\d+)/i);
-    if (m) maxEp = parseInt(m[1], 10);
+    const epMatch = epText.match(/episode\/(?:END\.)?(\d+)/i);
+    if (epMatch) maxEp = parseInt(epMatch[1], 10);
   }
 
   URL_TO_POSTID.set(url, postId);
@@ -186,14 +182,18 @@ async function getPostId(url) {
     ...(POST_INFO.get(postId) || {}),
     maxEp: maxEp || null,
     sourceType: sourceType || "unknown",
-    pageHtml: data
+    pageHtml: data,
+    playerPostId: playerPostId || null,
+    wpPostId: wpPostId || null
   });
 
   console.log("[POSTID]", {
     url,
     postId,
     sourceType,
-    maxEp
+    maxEp,
+    playerPostId,
+    wpPostId
   });
 
   return postId;
@@ -202,14 +202,13 @@ async function getPostId(url) {
 /* =========================
    BLOGGER FETCH JSON
 ========================= */
-async function fetchBloggerJson(blogId, postId, referer = "https://phumikhmer.vip/") {
+async function fetchBloggerJson(blogId, postId) {
   const feedUrl = `https://www.blogger.com/feeds/${blogId}/posts/default/${postId}?alt=json`;
 
   try {
     const { data } = await axiosClient.get(feedUrl, {
       headers: {
-        "User-Agent": "Mozilla/5.0",
-        Referer: referer
+        "User-Agent": "Mozilla/5.0"
       }
     });
 
@@ -222,14 +221,13 @@ async function fetchBloggerJson(blogId, postId, referer = "https://phumikhmer.vi
 /* =========================
    BLOGGER FETCH
 ========================= */
-async function fetchFromBlog(blogId, postId, referer = "https://phumikhmer.vip/") {
+async function fetchFromBlog(blogId, postId) {
   const feedUrl = `https://www.blogger.com/feeds/${blogId}/posts/default/${postId}?alt=json`;
 
   try {
     const { data } = await axiosClient.get(feedUrl, {
       headers: {
-        "User-Agent": "Mozilla/5.0",
-        Referer: referer
+        "User-Agent": "Mozilla/5.0"
       }
     });
 
@@ -248,49 +246,34 @@ async function fetchFromBlog(blogId, postId, referer = "https://phumikhmer.vip/"
 
     let urls = parseVipBloggerContent(content);
 
+    if (!urls.length) {
+      let okUrls = [];
+      const hasOkEmbed = /\{embed\s*=\s*ok\}/i.test(content);
+      const okIds = extractOkIds(content);
+
+      if (hasOkEmbed && okIds.length) {
+        okUrls = okIds.map((id) => `https://ok.ru/videoembed/${id}`);
+      }
+
+      urls = okUrls;
+    }
+
     if (!urls.length) return null;
 
-    return { title, thumbnail, urls };
+    return {
+      title,
+      thumbnail,
+      urls: [...new Set(urls)]
+    };
   } catch {
     return null;
   }
 }
 
 /* =========================
-   ORDER BLOG IDS BY PREFIX
+   WORDPRESS / HYBRID FETCH
 ========================= */
-function getOrderedBlogIds(prefix) {
-  const lowerMap = {};
-  for (const [key, value] of Object.entries(BLOG_IDS)) {
-    lowerMap[key.toLowerCase()] = value;
-  }
-
-  if (prefix === "vip") {
-    return [
-      lowerMap.vip,
-      lowerMap.onelegend,
-      lowerMap.kolab,
-      lowerMap.tvsabay
-    ].filter(Boolean);
-  }
-
-  if (prefix === "idrama") {
-    return [
-      lowerMap.idrama,
-      lowerMap.idramahd,
-      lowerMap.kolab,
-      lowerMap.onelegend,
-      lowerMap.tvsabay
-    ].filter(Boolean);
-  }
-
-  return Object.values(BLOG_IDS);
-}
-
-/* =========================
-   VIP / iDRAMA WORDPRESS DETAIL
-========================= */
-async function fetchWordpressHybridDetail(seriesUrl, postId) {
+async function fetchWpHybridDetail(seriesUrl, postId) {
   const cached = POST_INFO.get(postId) || {};
 
   let pageHtml = cached.pageHtml;
@@ -321,6 +304,7 @@ async function fetchWordpressHybridDetail(seriesUrl, postId) {
 
   thumbnail = normalizePoster(thumbnail);
 
+  // 1) Try direct HTML first
   let urls = extractVideoLinks(pageHtml);
   console.log("[WP-HYBRID] pageHtml direct urls:", urls);
 
@@ -342,84 +326,82 @@ async function fetchWordpressHybridDetail(seriesUrl, postId) {
     };
   }
 
-  const sourceType = cached?.sourceType || "";
-  const isIdrama = sourceType === "idrama-wordpress" || /idramahd\.com/i.test(seriesUrl);
+  // 2) Try wp-json post rendered content if wpPostId exists
+  if (cached.wpPostId) {
+    try {
+      const apiBase = new URL(seriesUrl).origin;
+      const wpApiUrl = `${apiBase}/wp-json/wp/v2/posts/${cached.wpPostId}`;
+      const { data: wpPost } = await axiosClient.get(wpApiUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0",
+          Referer: seriesUrl
+        }
+      });
 
-  const orderedBlogIds = isIdrama
-    ? getOrderedBlogIds("idrama")
-    : getOrderedBlogIds("vip");
+      const rendered = wpPost?.content?.rendered || "";
+      const restUrls = extractVideoLinks(rendered);
+      console.log("[WP-HYBRID] wp-json rendered urls:", restUrls);
 
-  const referer = isIdrama ? "https://www.idramahd.com/" : "https://phumikhmer.vip/";
-
-  for (const blogId of orderedBlogIds) {
-    const blogDetail = await fetchFromBlog(blogId, postId, referer);
-    if (blogDetail?.urls?.length) {
-      return {
-        title: blogDetail.title || pageTitle,
-        thumbnail: blogDetail.thumbnail || thumbnail,
-        urls: [...new Set(blogDetail.urls)]
-      };
-    }
-  }
-
-  try {
-    const base = new URL(seriesUrl).origin;
-    const wpApiUrl = `${base}/wp-json/wp/v2/posts/${postId}`;
-    const { data: wpPost } = await axiosClient.get(wpApiUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        Referer: seriesUrl
+      if (restUrls.length) {
+        return {
+          title: wpPost?.title?.rendered || pageTitle,
+          thumbnail,
+          urls: [...new Set(restUrls)]
+        };
       }
-    });
-
-    const rendered = wpPost?.content?.rendered || "";
-    const restUrls = parseVipBloggerContent(rendered);
-    console.log("[WP-HYBRID] wp-json rendered urls:", restUrls);
-
-    if (restUrls.length) {
-      return {
-        title: wpPost?.title?.rendered || pageTitle,
-        thumbnail,
-        urls: [...new Set(restUrls)]
-      };
+    } catch {
+      console.log("[WP-HYBRID] wp-json post fetch failed");
     }
-  } catch {
-    console.log("[WP-HYBRID] wp-json post fetch failed");
   }
 
-  return null;
+  return {
+    title: pageTitle,
+    thumbnail,
+    urls: []
+  };
 }
 
 /* =========================
    STREAM DETAIL
 ========================= */
-async function getStreamDetail(postId, seriesUrl, prefix = "") {
+async function getStreamDetail(postId, seriesUrl) {
   const cached = POST_INFO.get(postId);
   if (cached?.detail) return cached.detail;
 
   const sourceType = cached?.sourceType || "blogger";
   let detail = null;
 
-  if (sourceType === "vip-wordpress" || sourceType === "idrama-wordpress") {
-    detail = await fetchWordpressHybridDetail(seriesUrl, postId);
-  } else {
-    const orderedBlogIds =
-      prefix === "idrama"
-        ? getOrderedBlogIds("idrama")
-        : prefix === "vip"
-          ? getOrderedBlogIds("vip")
-          : Object.values(BLOG_IDS);
-
-    const referer =
-      prefix === "idrama"
-        ? "https://www.idramahd.com/"
-        : "https://phumikhmer.vip/";
-
+  // Blogger-backed first for blogger / wp-blogger pages
+  if (sourceType === "blogger" || sourceType === "wp-blogger") {
     const results = await Promise.all(
-      orderedBlogIds.map((blogId) => fetchFromBlog(blogId, postId, referer))
+      Object.values(BLOG_IDS).map((blogId) => fetchFromBlog(blogId, postId))
     );
 
     detail = results.find(Boolean);
+
+    // If blogger result found, enrich poster from wp page if missing/bad
+    if (detail && sourceType === "wp-blogger") {
+      const wpDetail = await fetchWpHybridDetail(seriesUrl, postId);
+      if (wpDetail?.thumbnail) {
+        detail.thumbnail = wpDetail.thumbnail;
+      }
+      if ((!detail.title || !detail.title.trim()) && wpDetail?.title) {
+        detail.title = wpDetail.title;
+      }
+    }
+
+    // If blogger fetch failed, try direct wp/html fallback
+    if (!detail && sourceType === "wp-blogger") {
+      const wpDetail = await fetchWpHybridDetail(seriesUrl, postId);
+      if (wpDetail?.urls?.length) {
+        detail = wpDetail;
+      }
+    }
+  } else if (sourceType === "vip-wordpress") {
+    const wpDetail = await fetchWpHybridDetail(seriesUrl, postId);
+    if (wpDetail?.urls?.length) {
+      detail = wpDetail;
+    }
   }
 
   if (!detail) {
@@ -440,6 +422,7 @@ async function getStreamDetail(postId, seriesUrl, prefix = "") {
 async function getEpisodes(prefix, seriesUrl) {
   const postId = await getPostId(seriesUrl);
 
+  // Sunday playlist
   if (!postId && prefix === "sunday") {
     const { data } = await axiosClient.get(seriesUrl);
 
@@ -466,7 +449,7 @@ async function getEpisodes(prefix, seriesUrl) {
       season: 1,
       episode: index + 1,
       thumbnail: normalizedPoster,
-      released: new Date().toISOString(),
+      released: new Date().toISOString()
     }));
   }
 
@@ -474,7 +457,7 @@ async function getEpisodes(prefix, seriesUrl) {
     return [];
   }
 
-  const detail = await getStreamDetail(postId, seriesUrl, prefix);
+  const detail = await getStreamDetail(postId, seriesUrl);
 
   console.log("[EPISODES]", {
     prefix,
@@ -510,7 +493,7 @@ async function getEpisodes(prefix, seriesUrl) {
             season: 1,
             episode: index + 1,
             thumbnail: normalizePoster(poster),
-            released: new Date().toISOString(),
+            released: new Date().toISOString()
           }));
         }
       } catch (err) {
@@ -535,7 +518,7 @@ async function getEpisodes(prefix, seriesUrl) {
     season: 1,
     episode: index + 1,
     thumbnail: detail.thumbnail,
-    released: new Date().toISOString(),
+    released: new Date().toISOString()
   }));
 }
 
@@ -557,6 +540,7 @@ async function getStream(prefix, seriesUrl, episode) {
   const providerName = providerNames[prefix] || "KhmerDub";
   const groupName = prefix || "khmerdub";
 
+  // Sunday fallback streaming
   if (prefix === "sunday" && !postId) {
     const { data } = await axiosClient.get(seriesUrl, {
       headers: {
@@ -574,7 +558,7 @@ async function getStream(prefix, seriesUrl, episode) {
 
   if (!postId) return null;
 
-  const detail = await getStreamDetail(postId, seriesUrl, prefix);
+  const detail = await getStreamDetail(postId, seriesUrl);
   if (!detail) return null;
 
   let url = detail.urls[episode - 1];
@@ -634,7 +618,7 @@ async function getCatalogItems(prefix, siteConfig, url) {
           allItems.push({
             id: `${prefix}:${encodeURIComponent(link)}`,
             name: title,
-            poster: normalizedPoster,
+            poster: normalizedPoster
           });
         }
 
@@ -673,7 +657,7 @@ async function getCatalogItems(prefix, siteConfig, url) {
       return {
         id: `${prefix}:${encodeURIComponent(link)}`,
         name: title,
-        poster: normalizedPoster,
+        poster: normalizedPoster
       };
     });
 
@@ -686,5 +670,5 @@ async function getCatalogItems(prefix, siteConfig, url) {
 module.exports = {
   getCatalogItems,
   getEpisodes,
-  getStream,
+  getStream
 };
