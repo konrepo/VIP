@@ -13,6 +13,14 @@ function cleanUrl(url = "") {
     .trim();
 }
 
+function decodeBase64Url(value = "") {
+  try {
+    return Buffer.from(value, "base64").toString("utf8");
+  } catch {
+    return "";
+  }
+}
+
 function extractPlayableUrl(html = "") {
   const text = cleanUrl(html);
 
@@ -47,9 +55,35 @@ async function resolvePlayerUrl(playerUrl, depth = 0) {
 
     playerUrl = String(playerUrl)
       .trim()
-      .replace(/;+$/, ""); // remove trailing semicolons
+      .replace(/;+$/, "");
 
     console.log("[resolvePlayerUrl] cleaned playerUrl:", playerUrl);
+
+    // DIRECT HANDLE: player.php?stream=<base64>&ext=.mp4
+    const streamMatch = playerUrl.match(
+      /[?&]stream=([^&]+)(?:&ext=(\.\w+))?/i
+    );
+
+    if (streamMatch) {
+      const encoded = decodeURIComponent(streamMatch[1]);
+      const decoded = cleanUrl(decodeBase64Url(encoded));
+      const ext = streamMatch[2] || "";
+
+      console.log("[resolvePlayerUrl] stream param found");
+      console.log("[resolvePlayerUrl] decoded stream:", decoded);
+      console.log("[resolvePlayerUrl] ext:", ext);
+
+      if (decoded && /^https?:\/\//i.test(decoded)) {
+        if (ext && !decoded.includes(ext) && !/\.(mp4|m3u8)(\?|$)/i.test(decoded)) {
+          const finalUrl = decoded + ext;
+          console.log("[resolvePlayerUrl] final decoded with ext:", finalUrl);
+          return finalUrl;
+        }
+
+        console.log("[resolvePlayerUrl] final decoded:", decoded);
+        return decoded;
+      }
+    }
 
     const { data } = await axiosClient.get(playerUrl, {
       headers: {
@@ -60,13 +94,14 @@ async function resolvePlayerUrl(playerUrl, depth = 0) {
 
     const html = typeof data === "string" ? data : JSON.stringify(data);
     console.log("[resolvePlayerUrl] html length:", html.length);
-    console.log("[resolvePlayerUrl] html preview:", html.slice(0, 1000));
+    console.log("[resolvePlayerUrl] html preview:", html.slice(0, 1200));
 
     const found = extractPlayableUrl(html);
     console.log("[resolvePlayerUrl] found:", found);
 
     if (!found) return null;
 
+    // If it found another player.php?stream=... then decode next round
     if (
       /phumikhmer\.vip\/player\.php\?(?:id|stream)=/i.test(found) &&
       found !== playerUrl
@@ -81,87 +116,3 @@ async function resolvePlayerUrl(playerUrl, depth = 0) {
     return null;
   }
 }
-
-/* =========================
-   RESOLVE OK
-========================= */
-async function resolveOkEmbed(embedUrl) {
-  try {
-    console.log("[resolveOkEmbed] start:", embedUrl);
-
-    const { data } = await axiosClient.get(embedUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        Referer: "https://ok.ru/",
-        Origin: "https://ok.ru"
-      }
-    });
-
-    const html = typeof data === "string" ? data : JSON.stringify(data);
-    console.log("[resolveOkEmbed] html length:", html.length);
-
-    const patterns = [
-      /\\&quot;ondemandHls\\&quot;:\\&quot;(https:\/\/[^"]+?\.m3u8[^"]*)/i,
-      /&quot;ondemandHls&quot;:&quot;(https:\/\/[^"]+?\.m3u8[^"]*)/i,
-      /"ondemandHls":"(https:\/\/[^"]+?\.m3u8[^"]*)/i,
-      /"hlsMasterPlaylistUrl":"(https:\/\/[^"]+?\.m3u8[^"]*)/i,
-      /"hlsManifestUrl":"(https:\/\/[^"]+?\.m3u8[^"]*)/i
-    ];
-
-    for (const re of patterns) {
-      const match = html.match(re);
-      if (match) {
-        const finalUrl = cleanUrl(match[1]).replace(/\\&quot;.*/g, "");
-        console.log("[resolveOkEmbed] found:", finalUrl);
-        return finalUrl;
-      }
-    }
-
-    console.log("[resolveOkEmbed] no hls found");
-    return null;
-  } catch (err) {
-    console.log("[resolveOkEmbed] error:", err.message);
-    return null;
-  }
-}
-
-/* =========================
-   BUILD STREAM
-========================= */
-function buildStream(
-  url,
-  episode,
-  title,
-  name = "KhmerDub",
-  group = "khmerdub",
-  options = {}
-) {
-  const { forceProxyHeaders = false } = options;
-
-  const needsOkHeaders =
-    forceProxyHeaders || /ok\.ru|okcdn\.ru/i.test(url);
-
-  return {
-    url,
-    name,
-    title: title || `Episode ${episode}`,
-    type: /\.m3u8(\?|$)/i.test(url) ? "hls" : undefined,
-    behaviorHints: needsOkHeaders
-      ? {
-          group,
-          proxyHeaders: {
-            request: {
-              Referer: "https://ok.ru/",
-              Origin: "https://ok.ru"
-            }
-          }
-        }
-      : { group }
-  };
-}
-
-module.exports = {
-  resolvePlayerUrl,
-  resolveOkEmbed,
-  buildStream
-};
