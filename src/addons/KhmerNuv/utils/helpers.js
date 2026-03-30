@@ -94,6 +94,41 @@ function extractVideoLinks(text) {
     .filter(isProbablyVideoUrl);
 }
 
+function extractSpecialEmbedUrls(text) {
+  if (!text || typeof text !== "string") return [];
+
+  const urls = [];
+  let match;
+
+  const patterns = [
+    {
+      re: /\{ok\s*=\s*([0-9]{6,})\}/gi,
+      map: (id) => `https://ok.ru/videoembed/${id}`
+    },
+    {
+      re: /\{dm\s*=\s*([a-zA-Z0-9]+)\}/gi,
+      map: (id) => `https://www.dailymotion.com/embed/video/${id}`
+    },
+    {
+      re: /\{gd\s*=\s*([a-zA-Z0-9_-]+)\}/gi,
+      map: (id) => `https://drive.google.com/file/d/${id}/preview`
+    },
+    {
+      re: /\{GDEmk\s*=\s*([a-zA-Z0-9_-]+)\}/gi,
+      map: (id) => `https://drive.google.com/file/d/${id}/preview`
+    }
+  ];
+
+  for (const { re, map } of patterns) {
+    re.lastIndex = 0;
+    while ((match = re.exec(text)) !== null) {
+      urls.push(map(match[1]));
+    }
+  }
+
+  return [...new Set(urls)].filter(isProbablyVideoUrl);
+}
+
 function extractMaxEpFromTitle(title) {
   if (!title) return null;
 
@@ -139,6 +174,7 @@ module.exports = {
   extractEpisodeNumber,
   isProbablyVideoUrl,
   extractVideoLinks,
+  extractSpecialEmbedUrls,
   extractMaxEpFromTitle,
   extractOkIds,
   mapMetas,
