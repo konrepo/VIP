@@ -2,19 +2,19 @@ const TYPE = "series";
 const EXTRA = ["search", "skip"];
 
 const sites = [
-  { id: "vip", name: "PhumiVip-test" },
-  { id: "sunday", name: "SundayDrama-test" },
-  { id: "phumi2", name: "PhumiClub-test" },  
-  { id: "khmerave", name: "KhmerAve-test" },
-  { id: "merlkon", name: "Merlkon-test" },
-  { id: "idrama", name: "iDramaHD-test" },
+  { id: "vip", name: "PhumiVip-TEST" },
+  { id: "sunday", name: "SundayDrama-TEST" },
+  { id: "phumi2", name: "PhumiClub-TEST" },  
+  { id: "khmerave", name: "KhmerAve-TEST" },
+  { id: "merlkon", name: "Merlkon-TEST" },
+  { id: "idrama", name: "iDramaHD-TEST" },
 ];
 
 module.exports = {
   id: "community.khmer.test",
   version: "3.5.0-test",
-  name: "KhmerDub Test",
-  description: "Stream Experimental Build | Dev: TheDevilz.",
+  name: "Nuvio Test",
+  description: "Stream Experimental Build NUVIO | Dev: TheDevilz.",
   logo: "https://raw.githubusercontent.com/konrepo/VIP/refs/heads/main/test.png",
 
   resources: ["catalog", "meta", "stream"],

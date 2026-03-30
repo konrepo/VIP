@@ -249,11 +249,19 @@ async function resolveOkRuToDirect(iframeUrl, ua) {
 ========================= */
 async function getStream(prefix, episodeUrl, episode) {
   try {
+    const providerNames = {
+      khmerave: "KhmerAve",
+      merlkon: "Merlkon"
+    };
+
+    const providerName = providerNames[prefix] || "KhmerDub";
+    const groupName = `${prefix}:${encodeURIComponent(episodeUrl)}`;
+
     const epRes = await axios.get(episodeUrl, {
       headers: { 
-	    "User-Agent": prefix === "khmerave" ? UA_WIN : UA_MOB,
-	    Referer: referer(prefix),
-	  },
+        "User-Agent": prefix === "khmerave" ? UA_WIN : UA_MOB,
+        Referer: referer(prefix),
+      },
       timeout: 15000,
     });
 
@@ -269,10 +277,11 @@ async function getStream(prefix, episodeUrl, episode) {
       if (!direct) return null;
 
       return {
+        name: providerName,
         title: `Episode ${String(episode).padStart(2, "0")}`,
         url: direct,
         behaviorHints: {
-          group: `${prefix}:${encodeURIComponent(episodeUrl)}`,
+          group: groupName,
           notWebReady: true,
           proxyHeaders: {
             request: {
@@ -286,8 +295,12 @@ async function getStream(prefix, episodeUrl, episode) {
 
     if (/\.(m3u8|mp4)(\?|$)/i.test(cand)) {
       return {
+        name: providerName,
         title: `Episode ${String(episode).padStart(2, "0")}`,
         url: cand,
+        behaviorHints: {
+          group: groupName
+        }
       };
     }
 

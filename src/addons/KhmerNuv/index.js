@@ -1,5 +1,8 @@
-const { addonBuilder, serveHTTP } = require("stremio-addon-sdk");
+// index.js
+
+const { addonBuilder } = require("stremio-addon-sdk");
 const manifest = require("./manifest");
+const DEBUG = false;
 
 const engine = require("./sites/engine");
 const khmerave = require("./sites/khmerave");
@@ -13,7 +16,7 @@ const axiosClient = require("./utils/fetch");
 const cheerio = require("cheerio");
 const { normalizePoster, mapMetas, uniqById } = require("./utils/helpers");
 
-const { makeMetaId } = require("./utils/hash");
+//const { makeMetaId } = require("./utils/hash");
 const { URL_CACHE, EP_CACHE, CATALOG_CACHE } = require("./utils/cache");
 
 function applyMetaId(items, prefix) {
@@ -21,7 +24,7 @@ function applyMetaId(items, prefix) {
     const url = item.id || item.url;
     if (typeof url !== "string" || !url.trim()) return null;
 
-    const metaId = makeMetaId(prefix, url);
+    const metaId = `${prefix}:${encodeURIComponent(url)}`;
     URL_CACHE.set(metaId, url);
 
     return {
@@ -67,7 +70,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 	}  
 	
 	const ctx = getSiteEngine(id);
-	console.log("CATALOG HANDLER DEBUG:", {
+	if (DEBUG) console.log("CATALOG HANDLER DEBUG:", {
 	  id,
 	  extra
 	});
@@ -230,7 +233,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
       const WEBSITE_PAGE_SIZE = site.pageSize || 12;
 
       const skip = Number(extra?.skip || 0);
-      const rawTargetPage = Math.floor(skip / WEBSITE_PAGE_SIZE) + 1;
+	  const rawTargetPage = Math.floor(skip / WEBSITE_PAGE_SIZE) + 1;
 
       const pageKeyBase = `phumi2:${id}:${extra?.search || ""}`;
       const lastPage = PAGE_TRACKER.get(pageKeyBase) || 1;
@@ -275,7 +278,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
         PAGE_URL_CACHE.set(`${pageKeyBase}:page:1`, startUrl);
       }
 
-      console.log("CATALOG DEBUG:", {
+      if (DEBUG) console.log("CATALOG DEBUG:", {
         id,
         skip,
         rawTargetPage,
@@ -287,7 +290,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 
       // move to requested page
       while (currentPage < targetPage && url) {
-        console.log("PHUMI2 WALK:", {
+        if (DEBUG) console.log("PHUMI2 WALK:", {
           currentPage,
           targetPage,
           url
@@ -315,10 +318,10 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
       const uniq = uniqById(allItems);
       const fixed = applyMetaId(uniq, id);
 
-      console.log("PHUMI2 CATALOG RESULT:", {
+      if (DEBUG) console.log("PHUMI2 CATALOG RESULT:", {
         count: fixed.length,
         firstMeta: fixed[0]?.id || null,
-        firstItem: fixed[0] || null
+        firstUrl: fixed[0] || null
       });
 
       const result = {
@@ -383,54 +386,61 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
 ========================= */
 builder.defineMetaHandler(async ({ id }) => {
   try {
-    const prefix = id.split(":")[0];
-    console.log("META HANDLER DEBUG:", {
-      id,
-      prefix
-    });
+    if (DEBUG) console.log("META HANDLER DEBUG:", { id, prefix: id.split(":")[0] });
+
+    const parts = id.split(":");
+    const prefix = parts[0];
 
     const ctx = getSiteEngine(prefix);
     if (!ctx) return { meta: null };
 
     const { site, engine: siteEngine } = ctx;
 
-    const seriesUrl = URL_CACHE.get(id);
-	console.log("META SERIES URL DEBUG:", {
-	  id,
-	  prefix,
-	  seriesUrl
-	});
-	
+    let seriesUrl = URL_CACHE.get(id);
+
+    if (!seriesUrl && parts.length > 1) {
+      try {
+        seriesUrl = decodeURIComponent(parts.slice(1).join(":"));
+      } catch {
+        seriesUrl = null;
+      }
+    }
+
+    if (DEBUG) console.log("META SERIES URL DEBUG:", {
+      id,
+      prefix,
+      seriesUrl
+    });
+
     if (!seriesUrl) return { meta: null };
 
     let episodes;
 
-	
     if (prefix === "khmerave" || prefix === "merlkon") {
       episodes = await khmerave.getEpisodes(prefix, seriesUrl);
+    } else if (prefix === "phumi2") {
+      episodes = await siteEngine.getEpisodes(prefix, seriesUrl);
+
+      if (!episodes.length) {
+        if (DEBUG) console.log("PHUMI2 META RETRY:", seriesUrl);
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        episodes = await siteEngine.getEpisodes(prefix, seriesUrl);
+      }
     } else {
       episodes = await siteEngine.getEpisodes(prefix, seriesUrl);
     }
-	
-    console.log("META EPISODES RESULT:", {
-	  prefix,
-	  count: episodes?.length || 0,
-	  firstEpisode: episodes?.[0] || null
-	});
-	
+
     if (!episodes.length) return { meta: null };
 
-    // normalize order
     if (
-      episodes.length > 1 && 
-	  Number.isFinite(episodes[0]?.episode) &&
-	  Number.isFinite(episodes[episodes.length - 1]?.episode) &&
-	  episodes[0].episode > episodes[episodes.length - 1].episode
-	){
+      episodes.length > 1 &&
+      Number.isFinite(episodes[0]?.episode) &&
+      Number.isFinite(episodes[episodes.length - 1]?.episode) &&
+      episodes[0].episode > episodes[episodes.length - 1].episode
+    ) {
       episodes = episodes.reverse();
     }
 
-    // cache normalized episodes
     EP_CACHE.set(id, episodes);
 
     const first = episodes[0];
@@ -442,15 +452,15 @@ builder.defineMetaHandler(async ({ id }) => {
         name: (first.title || "KhmerDub")
           .replace(/\[.*?\]/g, "")
           .replace(/-\s*$/, "")
-		  .trim(),
+          .trim(),
         description: (first.title || "KhmerDub")
-          .replace(/\[.*?\]/g, ""),		  
+          .replace(/\[.*?\]/g, ""),
         poster: first.thumbnail,
         background: first.thumbnail,
-        videos: episodes.map((ep, index) => ({
+        videos: episodes.map((ep) => ({
           id: `${id}:${ep.episode}`,
           title: ep.title || `Episode ${ep.episode}`,
-		  description: `Episode ${ep.episode}`,
+          description: `Episode ${ep.episode}`,
           season: 1,
           episode: ep.episode,
           thumbnail: ep.thumbnail
@@ -471,7 +481,6 @@ builder.defineStreamHandler(async ({ id }) => {
     const parts = id.split(":");
     if (parts.length < 2) return { streams: [] };
 
-    // Extract episode safely
     const episode = parts.pop();
     const metaId = parts.join(":");
 
@@ -480,33 +489,26 @@ builder.defineStreamHandler(async ({ id }) => {
       return { streams: [] };
     }
 
-    const prefix = metaId.split(":")[0];
-	
-	console.log("STREAM HANDLER DEBUG:", {
-	  id,
-	  metaId,
-	  prefix,
-	  episode: epNum
-	});
+    const metaParts = metaId.split(":");
+    const prefix = metaParts[0];
 
     const ctx = getSiteEngine(prefix);
     if (!ctx) return { streams: [] };
 
     const { site, engine: siteEngine } = ctx;
 
-    const seriesUrl = URL_CACHE.get(metaId);
-	
-	console.log("STREAM SERIES URL DEBUG:", {
-	  metaId,
-	  prefix,
-	  seriesUrl
-	});
-	
+    let seriesUrl = URL_CACHE.get(metaId);
+
+    if (!seriesUrl && metaParts.length > 1) {
+      try {
+        seriesUrl = decodeURIComponent(metaParts.slice(1).join(":"));
+      } catch {
+        seriesUrl = null;
+      }
+    }
+
     if (!seriesUrl) return { streams: [] };
 
-    // =========================
-    // USE CACHE FIRST
-    // =========================
     let episodes = EP_CACHE.get(metaId);
 
     if (!episodes) {
@@ -518,13 +520,12 @@ builder.defineStreamHandler(async ({ id }) => {
 
       if (!episodes.length) return { streams: [] };
 
-      // normalize
       if (
-        episodes.length > 1 && 
+        episodes.length > 1 &&
         Number.isFinite(episodes[0]?.episode) &&
         Number.isFinite(episodes[episodes.length - 1]?.episode) &&
         episodes[0].episode > episodes[episodes.length - 1].episode
-      ){
+      ) {
         episodes = episodes.reverse();
       }
 
@@ -532,19 +533,11 @@ builder.defineStreamHandler(async ({ id }) => {
     }
 
     let ep = episodes.find(e => e.episode === epNum);
-	console.log("STREAM EP MATCH DEBUG:", {
-	  prefix,
-	  epNum,
-	  episodesCount: episodes?.length || 0,
-	  matchedEpisode: ep || null
-	});
-	
     if (!ep && epNum - 1 >= 0 && epNum - 1 < episodes.length) {
-	  ep = episodes[epNum - 1];
+      ep = episodes[epNum - 1];
     }
     if (!ep) return { streams: [] };
 
-    // Use episode URL directly
     let stream;
 
     if (prefix === "khmerave" || prefix === "merlkon") {
@@ -556,18 +549,10 @@ builder.defineStreamHandler(async ({ id }) => {
     if (!stream) return { streams: [] };
 
     return { streams: [stream] };
-
   } catch (err) {
     console.error("stream error:", err);
     return { streams: [] };
   }
 });
 
-/* =========================
-   START SERVER
-========================= */
-serveHTTP(builder.getInterface(), {
-  port: process.env.PORT || 7000,
-});
-
-console.log("KhmerDub Addon running on port", process.env.PORT || 7000);
+module.exports = builder.getInterface();
