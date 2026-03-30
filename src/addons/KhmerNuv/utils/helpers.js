@@ -26,47 +26,6 @@ const PLAYER_REGEX =
 const FILE_REGEX =
   /file\s*:\s*["'](https?:\/\/[^"']+\.mp4(?:\?[^"']+)?)["']/gi;
 
-/* =========================
-   TOKEN EMBED REGEX
-========================= */
-const TOKEN_PATTERNS = [
-  {
-    regex: /\{ok\s*=\s*([\w-]+)\}/gi,
-    build: (id) => `https://ok.ru/videoembed/${id}`
-  },
-  {
-    regex: /\{dm\s*=\s*([\w-]+)\}/gi,
-    build: (id) => `https://www.dailymotion.com/embed/video/${id}`
-  },
-  {
-    regex: /\{gd\s*=\s*([\w-]+)\}/gi,
-    build: (id) => `https://drive.google.com/file/d/${id}/preview`
-  },
-  {
-    regex: /\{GDEmk\s*=\s*([\w-]+)\}/gi,
-    build: (id) => `https://drive.google.com/file/d/${id}/preview`
-  }
-];
-
-function extractSpecialEmbedUrls(text) {
-  if (!text || typeof text !== "string") return [];
-
-  const urls = [];
-
-  for (const { regex, build } of TOKEN_PATTERNS) {
-    regex.lastIndex = 0;
-    let match;
-
-    while ((match = regex.exec(text)) !== null) {
-      const value = (match[1] || "").trim();
-      if (!value) continue;
-      urls.push(build(value));
-    }
-  }
-
-  return Array.from(new Set(urls));
-}
-
 function extractEpisodeNumber(url, index = 0, maxEp = null) {
   if (!url || typeof url !== "string") return index + 1;
 
@@ -101,10 +60,10 @@ function isProbablyVideoUrl(url) {
     /\.m3u8(\?|$)/i.test(url) ||
     /\.mp4(\?|$)/i.test(url) ||
     /ok\.ru\/videoembed\//i.test(url) ||
-    /dailymotion\.com\/embed\/video\//i.test(url) ||
-    /drive\.google\.com\/file\/d\/[^/]+\/preview/i.test(url) ||
     /phumikhmer\.vip\/player\.php\?(?:id|stream)=/i.test(url) ||
-    /sooplive\.co\.kr/i.test(url)
+    /sooplive\.co\.kr/i.test(url) ||
+    /dailymotion\.com\/embed\/video\//i.test(url) ||
+    /drive\.google\.com\/file\/d\//i.test(url)
   );
 }
 
@@ -112,12 +71,9 @@ function extractVideoLinks(text) {
   if (!text) return [];
 
   const directMatches = text.match(DIRECT_REGEX) || [];
-
   const okMatches = (text.match(OK_REGEX) || [])
     .map((u) => u.replace("/video/", "/videoembed/"));
-
   const playerMatches = text.match(PLAYER_REGEX) || [];
-  const tokenMatches = extractSpecialEmbedUrls(text);
 
   FILE_REGEX.lastIndex = 0;
 
@@ -131,11 +87,45 @@ function extractVideoLinks(text) {
     ...directMatches,
     ...okMatches,
     ...playerMatches,
-    ...fileMatches,
-    ...tokenMatches
+    ...fileMatches
   ]))
     .map((u) => u.trim())
     .filter(isProbablyVideoUrl);
+}
+
+function extractSpecialEmbedUrls(text) {
+  if (!text || typeof text !== "string") return [];
+
+  const urls = [];
+  let match;
+
+  const patterns = [
+    {
+      re: /\{ok\s*=\s*([0-9]{6,})\}/gi,
+      map: (id) => `https://ok.ru/videoembed/${id}`
+    },
+    {
+      re: /\{dm\s*=\s*([a-zA-Z0-9]+)\}/gi,
+      map: (id) => `https://www.dailymotion.com/embed/video/${id}`
+    },
+    {
+      re: /\{gd\s*=\s*([a-zA-Z0-9_-]+)\}/gi,
+      map: (id) => `https://drive.google.com/file/d/${id}/preview`
+    },
+    {
+      re: /\{GDEmk\s*=\s*([a-zA-Z0-9_-]+)\}/gi,
+      map: (id) => `https://drive.google.com/file/d/${id}/preview`
+    }
+  ];
+
+  for (const { re, map } of patterns) {
+    re.lastIndex = 0;
+    while ((match = re.exec(text)) !== null) {
+      urls.push(map(match[1]));
+    }
+  }
+
+  return [...new Set(urls)].filter(isProbablyVideoUrl);
 }
 
 function extractMaxEpFromTitle(title) {
@@ -175,7 +165,7 @@ function mapMetas(items, type = "series") {
 }
 
 function uniqById(items) {
-  return [...new Map(items.map(item => [item.id, item])).values()];
+  return [...new Map(items.map((item) => [item.id, item])).values()];
 }
 
 module.exports = {
