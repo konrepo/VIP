@@ -45,6 +45,12 @@ async function resolvePlayerUrl(playerUrl, depth = 0) {
       return null;
     }
 
+    playerUrl = String(playerUrl)
+      .trim()
+      .replace(/;+$/, ""); // remove trailing semicolons
+
+    console.log("[resolvePlayerUrl] cleaned playerUrl:", playerUrl);
+
     const { data } = await axiosClient.get(playerUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0",
@@ -54,6 +60,7 @@ async function resolvePlayerUrl(playerUrl, depth = 0) {
 
     const html = typeof data === "string" ? data : JSON.stringify(data);
     console.log("[resolvePlayerUrl] html length:", html.length);
+    console.log("[resolvePlayerUrl] html preview:", html.slice(0, 1000));
 
     const found = extractPlayableUrl(html);
     console.log("[resolvePlayerUrl] found:", found);
