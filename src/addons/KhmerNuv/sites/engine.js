@@ -19,6 +19,7 @@ const {
 
 const DEBUG = false;
 
+
 /* =========================
    HELPERS
 ========================= */
@@ -69,6 +70,41 @@ function scoreCandidate(title = "", slug = "", targetTitle = "", targetSlug = ""
   return score;
 }
 
+function extractEpisodeFromTitle(text = "") {
+  const s = String(text || "").trim();
+
+  let m =
+    s.match(/\[\s*EP\s*0*(\d+)\s*(?:END)?\s*\]/i) ||
+    s.match(/\bEP(?:ISODE)?\s*0*(\d+)\b/i) ||
+    s.match(/\bPART\s*0*(\d+)\b/i);
+
+  return m ? parseInt(m[1], 10) : null;
+}
+
+function buildEpisodeObjects({
+  prefix,
+  seriesUrl,
+  episodes = [],
+  thumbnail = "",
+  fallbackTitle = ""
+}) {
+  return episodes
+    .filter(ep => ep && Number.isInteger(ep.episode) && ep.episode > 0 && ep.urls?.length)
+    .sort((a, b) => a.episode - b.episode)
+    .map(ep => ({
+      id: ep.episode,
+      url: ep.urls[0],
+      title: ep.title || fallbackTitle || `Episode ${ep.episode}`,
+      season: 1,
+      episode: ep.episode,
+      thumbnail: ep.thumbnail || thumbnail || "",
+      released: new Date().toISOString(),
+      behaviorHints: {
+        group: `${prefix}:${encodeURIComponent(seriesUrl)}`
+      }
+    }));
+}
+
 async function searchVipBloggerPosts(blogId, query) {
   const feedUrl =
     `https://www.blogger.com/feeds/${blogId}/posts/default` +
@@ -101,7 +137,7 @@ async function findVipBloggerDetailBySearch(seriesUrl, postId) {
 
   const queries = [...new Set([targetSlug, targetTitle].filter(Boolean))];
 
-  let best = null;
+  const episodeMap = new Map();
 
   for (const blogId of vipBlogs) {
     for (const query of queries) {
@@ -136,6 +172,12 @@ async function findVipBloggerDetailBySearch(seriesUrl, postId) {
         urls = uniqUrls(urls);
         if (!urls.length) continue;
 
+        const ep =
+          extractEpisodeFromTitle(title) ||
+          extractEpisodeFromTitle(entrySlug);
+
+        if (!ep) continue;
+
         const $content = cheerio.load(content);
         const thumbnail = normalizePoster(
           $content('meta[property="og:image"]').attr("content") ||
@@ -145,26 +187,31 @@ async function findVipBloggerDetailBySearch(seriesUrl, postId) {
           ""
         );
 
+        const prev = episodeMap.get(ep);
+
         const candidate = {
+          episode: ep,
           title,
           thumbnail,
           urls,
           score
         };
 
-        if (!best || candidate.score > best.score) {
-          best = candidate;
+        if (!prev || candidate.score > prev.score) {
+          episodeMap.set(ep, candidate);
         }
       }
     }
   }
 
-  if (!best) return null;
+  const episodes = [...episodeMap.values()].sort((a, b) => a.episode - b.episode);
+  if (!episodes.length) return null;
 
   return {
-    title: best.title,
-    thumbnail: best.thumbnail,
-    urls: best.urls
+    title: targetTitle || episodes[0]?.title || "",
+    thumbnail: episodes.find(x => x.thumbnail)?.thumbnail || "",
+    urls: uniqUrls(episodes.flatMap(x => x.urls)),
+    episodes
   };
 }
 
@@ -371,10 +418,22 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
   urls = uniqUrls(urls);
 
   if (urls.length) {
+    const pageEp =
+      extractEpisodeFromTitle(cached.cleanTitle || "") ||
+      extractEpisodeFromTitle(pageTitle) ||
+      cached.maxEp ||
+      1;
+
     return {
       title: pageTitle,
       thumbnail,
-      urls
+      urls,
+      episodes: [{
+        episode: pageEp,
+        title: pageTitle,
+        thumbnail,
+        urls
+      }]
     };
   }
 
@@ -388,10 +447,22 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
   urls = uniqUrls(urls);
 
   if (urls.length) {
+    const pageEp =
+      extractEpisodeFromTitle(cached.cleanTitle || "") ||
+      extractEpisodeFromTitle(pageTitle) ||
+      cached.maxEp ||
+      1;
+
     return {
       title: pageTitle,
       thumbnail,
-      urls
+      urls,
+      episodes: [{
+        episode: pageEp,
+        title: pageTitle,
+        thumbnail,
+        urls
+      }]
     };
   }
 
@@ -422,26 +493,46 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
     restUrls = uniqUrls(restUrls);
 
     if (restUrls.length) {
+      const wpTitle = wpPost?.title?.rendered || pageTitle;
+      const pageEp =
+        extractEpisodeFromTitle(cached.cleanTitle || "") ||
+        extractEpisodeFromTitle(wpTitle) ||
+        cached.maxEp ||
+        1;
+
       return {
-        title: wpPost?.title?.rendered || pageTitle,
+        title: wpTitle,
         thumbnail,
-        urls: restUrls
+        urls: restUrls,
+        episodes: [{
+          episode: pageEp,
+          title: wpTitle,
+          thumbnail,
+          urls: restUrls
+        }]
       };
     }
   } catch {
     // ignore
   }
 
-  /* 4) blogger search fallback */
+  /* 4) blogger search fallback: build full episode list */
   const searched = await findVipBloggerDetailBySearch(seriesUrl, postId);
   if (searched) {
     if (!searched.thumbnail && thumbnail) {
       searched.thumbnail = thumbnail;
     }
+
     return {
       title: searched.title || pageTitle,
       thumbnail: searched.thumbnail || thumbnail,
-      urls: uniqUrls(searched.urls || [])
+      urls: uniqUrls(searched.urls || []),
+      episodes: (searched.episodes || []).map(ep => ({
+        episode: ep.episode,
+        title: ep.title,
+        thumbnail: ep.thumbnail || searched.thumbnail || thumbnail,
+        urls: uniqUrls(ep.urls || [])
+      }))
     };
   }
 
@@ -655,9 +746,26 @@ async function getEpisodes(prefix, seriesUrl) {
   const detail = await getStreamDetail(postId, seriesUrl);
   if (!detail) return [];
 
-  /* VIP WordPress: treat page as single episode post with mirror URLs */
+  /* VIP WordPress: use structured episodes if available */
   if (info.sourceType === "vip-wordpress") {
+    if (Array.isArray(detail.episodes) && detail.episodes.length) {
+      return detail.episodes.map((ep) => ({
+        id: ep.episode,
+        url: ep.url,
+        title: ep.title || `Episode ${ep.episode}`,
+        season: 1,
+        episode: ep.episode,
+        thumbnail: ep.thumbnail || detail.thumbnail || "",
+        released: new Date().toISOString(),
+        behaviorHints: {
+          group: `${prefix}:${encodeURIComponent(seriesUrl)}`
+        }
+      }));
+    }
+
     const singleEp =
+      extractEpisodeFromTitle(info.cleanTitle || "") ||
+      extractEpisodeFromTitle(detail.title || "") ||
       extractMaxEpFromTitle(info.cleanTitle || "") ||
       extractMaxEpFromTitle(detail.title || "") ||
       info.maxEp ||
