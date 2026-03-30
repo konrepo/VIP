@@ -1,16 +1,16 @@
 const cheerio = require("cheerio");
 const axiosClient = require("../utils/fetch");
 const { URL_TO_POSTID, POST_INFO, BLOG_IDS } = require("../utils/cache");
-const { 
-  normalizePoster, 
-  extractVideoLinks, 
-  extractMaxEpFromTitle, 
-  extractOkIds, 
+const {
+  normalizePoster,
+  extractVideoLinks,
+  extractMaxEpFromTitle,
+  extractOkIds,
   uniqById
 } = require("../utils/helpers");
 
 const FILE_REGEX =
-  /file\s*:\s*["'](https?:\/\/[^"']+\.mp4(?:\?[^"']+)?)["']/gi;  
+  /file\s*:\s*["'](https?:\/\/[^"']+\.mp4(?:\?[^"']+)?)["']/gi;
 
 const {
   resolvePlayerUrl,
@@ -19,43 +19,37 @@ const {
 } = require("../utils/streamResolvers");
 
 /* =========================
-   VIP Blogger
+   VIP PARSER
 ========================= */
 function parseVipBloggerContent(content = "") {
   const urls = [];
   const okIds = [];
 
-  // Direct links already supported by helpers
   urls.push(...extractVideoLinks(content));
 
-  let m;
+  let match;
 
-  // {dm=xxxx}
   const dmRegex = /\{dm=(\w+)\}/gi;
-  while ((m = dmRegex.exec(content)) !== null) {
-    urls.push(`https://www.dailymotion.com/embed/video/${m[1]}`);
+  while ((match = dmRegex.exec(content)) !== null) {
+    urls.push(`https://www.dailymotion.com/embed/video/${match[1]}`);
   }
 
-  // {gd=xxxx}
   const gdRegex = /\{gd=(\w+)\}/gi;
-  while ((m = gdRegex.exec(content)) !== null) {
-    urls.push(`https://drive.google.com/file/d/${m[1]}/preview`);
+  while ((match = gdRegex.exec(content)) !== null) {
+    urls.push(`https://drive.google.com/file/d/${match[1]}/preview`);
   }
 
-  // {ok=xxxx}
   const okRegex = /\{ok=(\w+)\}/gi;
-  while ((m = okRegex.exec(content)) !== null) {
-    okIds.push(m[1]);
+  while ((match = okRegex.exec(content)) !== null) {
+    okIds.push(match[1]);
   }
 
-  // If content says {embed=ok}, convert ids to embed urls
   if (/\{embed\s*=\s*ok\}/i.test(content)) {
     okIds.forEach((id) => {
       urls.push(`https://ok.ru/videoembed/${id}`);
     });
   }
 
-  // Semicolon-separated fallback parts
   const parts = content
     .split(";")
     .map((s) => s.trim())
@@ -89,6 +83,122 @@ function parseVipBloggerContent(content = "") {
 }
 
 /* =========================
+   VIP SEARCH HELPERS
+========================= */
+function normalizeSearchText(text = "") {
+  return text
+    .toLowerCase()
+    .replace(/&#8217;|&#8216;|&#8220;|&#8221;/g, " ")
+    .replace(/[^\w\s]+/g, " ")
+    .replace(/\b(ep|episode|part|end)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function scoreCandidate(title = "", slug = "", targetTitle = "", targetSlug = "") {
+  const t = normalizeSearchText(title);
+  const tt = normalizeSearchText(targetTitle);
+  const s = (slug || "").toLowerCase().trim();
+  const ts = (targetSlug || "").toLowerCase().trim();
+
+  let score = 0;
+
+  if (ts && s === ts) score += 100;
+  if (ts && s.includes(ts)) score += 40;
+  if (ts && ts.includes(s) && s) score += 20;
+
+  if (tt && t === tt) score += 80;
+  if (tt && t.includes(tt)) score += 35;
+  if (tt && tt.includes(t) && t) score += 15;
+
+  return score;
+}
+
+async function searchVipBloggerPosts(blogId, query) {
+  const feedUrl =
+    `https://www.blogger.com/feeds/${blogId}/posts/default` +
+    `?alt=json&max-results=20&q=${encodeURIComponent(query)}`;
+
+  try {
+    const { data } = await axiosClient.get(feedUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        Referer: "https://phumikhmer.vip/"
+      }
+    });
+
+    const entries = data?.feed?.entry || [];
+    return Array.isArray(entries) ? entries : [entries];
+  } catch {
+    return [];
+  }
+}
+
+async function findVipBloggerDetailBySearch(seriesUrl, postId) {
+  const cached = POST_INFO.get(postId) || {};
+  const targetSlug = cached.slug || "";
+  const targetTitle = cached.cleanTitle || "";
+
+  const vipBlogs = [BLOG_IDS.ONELEGEND, BLOG_IDS.KOLAB];
+  const queries = [...new Set([targetSlug, targetTitle].filter(Boolean))];
+
+  let best = null;
+
+  for (const blogId of vipBlogs) {
+    for (const query of queries) {
+      const entries = await searchVipBloggerPosts(blogId, query);
+
+      for (const entry of entries) {
+        const title = entry?.title?.$t || "";
+        const content = entry?.content?.$t || "";
+        const links = entry?.link || [];
+
+        const altLinkObj = links.find((l) => l.rel === "alternate");
+        const entryUrl = altLinkObj?.href || "";
+        const entrySlug = entryUrl
+          .split("/")
+          .filter(Boolean)
+          .pop() || "";
+
+        const score = scoreCandidate(title, entrySlug, targetTitle, targetSlug);
+        if (score < 30) continue;
+
+        const urls = parseVipBloggerContent(content);
+        if (!urls.length) continue;
+
+        const $content = cheerio.load(content);
+        const thumbnail = normalizePoster(
+          $content("img").first().attr("src") ||
+          entry.media$thumbnail?.url ||
+          ""
+        );
+
+        const candidate = {
+          title,
+          thumbnail,
+          urls,
+          score,
+          blogId,
+          entryUrl
+        };
+
+        if (!best || candidate.score > best.score) {
+          best = candidate;
+        }
+      }
+    }
+  }
+
+  if (!best) return null;
+
+  return {
+    title: best.title,
+    thumbnail: best.thumbnail,
+    urls: best.urls
+  };
+}
+
+/* =========================
    GET POST ID
 ========================= */
 async function getPostId(url) {
@@ -108,9 +218,11 @@ async function getPostId(url) {
   let postId = null;
   let sourceType = null;
 
-  // Old VIP / iDrama
+  // VIP / iDrama old blogger style
   postId = $("#player").attr("data-post-id");
-  if (postId) sourceType = "blogger";
+  if (postId) {
+    sourceType = "blogger";
+  }
 
   // SundayDrama
   if (!postId) {
@@ -121,7 +233,7 @@ async function getPostId(url) {
     }
   }
 
-  // Old Blogger fallback
+  // Blogger fallback from feed url in page source
   if (!postId) {
     const match = data.match(
       /blogger\.com\/feeds\/\d+\/posts\/default\/(\d+)\?alt=json/i
@@ -132,48 +244,62 @@ async function getPostId(url) {
     }
   }
 
-  // NEW VIP WordPress post id fallback
+  // VIP WordPress fallback
   if (!postId) {
-    let m = null;
+    let match = null;
 
     const shortlink = $('link[rel="shortlink"]').attr("href") || "";
-    m = shortlink.match(/[?&]p=(\d+)/i);
+    match = shortlink.match(/[?&]p=(\d+)/i);
 
-    if (!m) {
+    if (!match) {
       const apiLink =
         $('link[rel="alternate"][type="application/json"]').attr("href") || "";
-      m = apiLink.match(/\/wp-json\/wp\/v2\/posts\/(\d+)/i);
+      match = apiLink.match(/\/wp-json\/wp\/v2\/posts\/(\d+)/i);
     }
 
-    if (!m) {
+    if (!match) {
       const articleId = $("article[id^='post-']").attr("id") || "";
-      m = articleId.match(/^post-(\d+)$/i);
+      match = articleId.match(/^post-(\d+)$/i);
     }
 
-    if (!m) {
+    if (!match) {
       const imgPostId = $("img[post-id]").first().attr("post-id");
       if (imgPostId) {
-        m = [, imgPostId];
+        match = [, imgPostId];
       }
     }
 
-    if (m) {
-      postId = m[1];
+    if (match) {
+      postId = match[1];
       sourceType = "vip-wordpress";
     }
   }
 
   if (!postId) return null;
 
-  // Extract max EP from title OR from SundayDrama "episode/END.xx"
   const pageTitle = $("title").text().trim();
   let maxEp = extractMaxEpFromTitle(pageTitle);
 
   if (!maxEp) {
     const epText = $('b:contains("episode/")').first().text() || "";
-    const m = epText.match(/episode\/(?:END\.)?(\d+)/i);
-    if (m) maxEp = parseInt(m[1], 10);
+    const match = epText.match(/episode\/(?:END\.)?(\d+)/i);
+    if (match) maxEp = parseInt(match[1], 10);
   }
+
+  const urlObj = new URL(url);
+  const slug =
+    urlObj.pathname
+      .split("/")
+      .filter(Boolean)
+      .pop() || "";
+
+  const cleanTitle =
+    $("meta[property='og:title']").attr("content") ||
+    $("h1.entry-title, h1.post-title, h1.single-post-title, title")
+      .first()
+      .text()
+      .trim() ||
+    "";
 
   URL_TO_POSTID.set(url, postId);
 
@@ -181,14 +307,9 @@ async function getPostId(url) {
     ...(POST_INFO.get(postId) || {}),
     maxEp: maxEp || null,
     sourceType: sourceType || "unknown",
-    pageHtml: data
-  });
-
-  console.log("[POSTID]", {
-    url,
-    postId,
-    sourceType,
-    maxEp
+    pageHtml: data,
+    slug,
+    cleanTitle
   });
 
   return postId;
@@ -236,15 +357,14 @@ async function fetchFromBlog(blogId, postId) {
 
     thumbnail = normalizePoster(thumbnail);
 
-    let urls = extractVideoLinks(content);
+    let urls = parseVipBloggerContent(content);
 
-    // If blogger post stores OK.ru IDs (like: 9488...; 9488...; {embed=ok})
     if (!urls.length) {
       const hasOkEmbed = /\{embed\s*=\s*ok\}/i.test(content);
       const okIds = extractOkIds(content);
 
       if (hasOkEmbed && okIds.length) {
-		urls = okIds.map(id => `https://ok.ru/videoembed/${id}`);
+        urls = okIds.map((id) => `https://ok.ru/videoembed/${id}`);
       }
     }
 
@@ -257,7 +377,7 @@ async function fetchFromBlog(blogId, postId) {
 }
 
 /* =========================
-   FETCH VIP
+   FETCH VIP WORDPRESS
 ========================= */
 async function fetchVipWordpressDetail(seriesUrl, postId) {
   const cached = POST_INFO.get(postId) || {};
@@ -289,21 +409,8 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
 
   thumbnail = normalizePoster(thumbnail);
 
-  // 1) Direct page HTML scan first
+  // 1. direct page scan
   let urls = extractVideoLinks(pageHtml);
-  console.log("[VIP] pageHtml direct urls:", urls);
-
-  if (!urls.length) {
-    // 2) Scan inline scripts for clues
-    const scripts = $("script")
-      .map((_, el) => $(el).html() || "")
-      .get()
-      .join("\n");
-
-    urls = extractVideoLinks(scripts);
-    console.log("[VIP] inline script urls:", urls);
-  }
-
   if (urls.length) {
     return {
       title: pageTitle,
@@ -312,7 +419,22 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
     };
   }
 
-  // 3) Try WordPress REST post endpoint
+  // 2. inline scripts scan
+  const scripts = $("script")
+    .map((_, el) => $(el).html() || "")
+    .get()
+    .join("\n");
+
+  urls = extractVideoLinks(scripts);
+  if (urls.length) {
+    return {
+      title: pageTitle,
+      thumbnail,
+      urls: [...new Set(urls)]
+    };
+  }
+
+  // 3. wp-json post content scan
   try {
     const wpApiUrl = `https://phumikhmer.vip/wp-json/wp/v2/posts/${postId}`;
     const { data: wpPost } = await axiosClient.get(wpApiUrl, {
@@ -324,7 +446,6 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
 
     const rendered = wpPost?.content?.rendered || "";
     const restUrls = extractVideoLinks(rendered);
-    console.log("[VIP] wp-json rendered urls:", restUrls);
 
     if (restUrls.length) {
       return {
@@ -333,8 +454,15 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
         urls: [...new Set(restUrls)]
       };
     }
-  } catch (err) {
-    console.log("[VIP] wp-json post fetch failed");
+  } catch {}
+
+  // 4. search blogger by slug/title
+  const searched = await findVipBloggerDetailBySearch(seriesUrl, postId);
+  if (searched) {
+    if (!searched.thumbnail && thumbnail) {
+      searched.thumbnail = thumbnail;
+    }
+    return searched;
   }
 
   return null;
@@ -343,7 +471,7 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
 /* =========================
    STREAM DETAIL
 ========================= */
-async function getStreamDetail(postId, seriesUrl) {
+async function getStreamDetail(postId, seriesUrl = "") {
   const cached = POST_INFO.get(postId);
   if (cached?.detail) return cached.detail;
 
@@ -380,7 +508,7 @@ async function getStreamDetail(postId, seriesUrl) {
 async function getEpisodes(prefix, seriesUrl) {
   const postId = await getPostId(seriesUrl);
 
-  // Sunday playlist
+  // Sunday playlist fallback
   if (!postId && prefix === "sunday") {
     const { data } = await axiosClient.get(seriesUrl);
 
@@ -417,64 +545,17 @@ async function getEpisodes(prefix, seriesUrl) {
 
   const detail = await getStreamDetail(postId, seriesUrl);
 
-  console.log("[EPISODES]", {
-    prefix,
-    seriesUrl,
-    postId,
-    detail
-  });
-
-  // =========================
-  // VIP FALLBACK
-  // =========================
   if (!detail) {
-    if (prefix === "vip") {
-      try {
-        const { data } = await axiosClient.get(seriesUrl, {
-          headers: {
-            "User-Agent": "Mozilla/5.0",
-            Referer: seriesUrl
-          }
-        });
-
-        const fallbackUrls = extractVideoLinks(data);
-        console.log("[VIP] fallback episode urls:", fallbackUrls);
-
-        if (fallbackUrls.length) {
-          const $ = cheerio.load(data);
-          const poster =
-            $("meta[property='og:image']").attr("content") ||
-            $("meta[name='twitter:image']").attr("content") ||
-            "";
-
-          return fallbackUrls.map((url, index) => ({
-            id: `${prefix}:${encodeURIComponent(seriesUrl)}:1:${index + 1}`,
-            title: `Episode ${index + 1}`,
-            season: 1,
-            episode: index + 1,
-            thumbnail: normalizePoster(poster),
-            released: new Date().toISOString(),
-          }));
-        }
-      } catch (err) {
-        console.log("[VIP] fallback error:", err.message);
-      }
-    }
-
     return [];
   }
 
-  // =========================
-  // NORMAL FLOW
-  // =========================
   const maxEp = POST_INFO.get(postId)?.maxEp || null;
 
   let urls = [...new Set(detail.urls)];
 
-  // Keep disabled while debugging VIP
-  // if (maxEp && urls.length > maxEp) {
-  //   urls = urls.slice(0, maxEp);
-  // }
+  if (maxEp && urls.length > maxEp) {
+    urls = urls.slice(0, maxEp);
+  }
 
   return urls.map((url, index) => ({
     id: `${prefix}:${encodeURIComponent(seriesUrl)}:1:${index + 1}`,
@@ -485,7 +566,6 @@ async function getEpisodes(prefix, seriesUrl) {
     released: new Date().toISOString(),
   }));
 }
-
 
 /* =========================
    STREAM
@@ -523,20 +603,40 @@ async function getStream(prefix, seriesUrl, episode) {
 
   if (!postId) return null;
 
-  const detail = await getStreamDetail(postId, seriesUrl);
+  let detail = await getStreamDetail(postId, seriesUrl);
+
+  // vip direct fallback
+  if (!detail && prefix === "vip") {
+    try {
+      const { data } = await axiosClient.get(seriesUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0",
+          Referer: seriesUrl
+        }
+      });
+
+      const fallbackUrls = extractVideoLinks(data);
+      if (fallbackUrls.length) {
+        detail = {
+          title: "VIP",
+          thumbnail: "",
+          urls: fallbackUrls
+        };
+      }
+    } catch {}
+  }
+
   if (!detail) return null;
 
   let url = detail.urls[episode - 1];
   if (!url) return null;
 
-  // Resolve player.php
   if (url.includes("player.php")) {
     const resolved = await resolvePlayerUrl(url);
     if (!resolved) return null;
     url = resolved;
   }
 
-  // Resolve OK embed
   if (url.includes("ok.ru/videoembed/")) {
     const resolved = await resolveOkEmbed(url);
     if (!resolved) return null;
@@ -551,8 +651,6 @@ async function getStream(prefix, seriesUrl, episode) {
 ========================= */
 async function getCatalogItems(prefix, siteConfig, url) {
   try {
-
-    // === Sunday Blogger Pagination Support ===
     if (prefix === "sunday") {
       const allItems = [];
       let currentUrl = url;
@@ -628,7 +726,6 @@ async function getCatalogItems(prefix, siteConfig, url) {
     });
 
     return results.filter(Boolean);
-
   } catch {
     return [];
   }
