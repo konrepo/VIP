@@ -20,7 +20,7 @@ const {
 const DEBUG = false;
 
 /* =========================
-   VIP PARSER
+   VIP BLOGGER CONTENT PARSER
 ========================= */
 function parseVipBloggerContent(content = "") {
   const urls = [];
@@ -80,7 +80,7 @@ function parseVipBloggerContent(content = "") {
     }
   }
 
-  return [...new Set(urls)];
+  return [...new Set(urls)].filter(isProbablyVideoUrl);
 }
 
 /* =========================
@@ -156,21 +156,18 @@ async function findVipBloggerDetailBySearch(seriesUrl, postId) {
 
         const altLinkObj = links.find((l) => l.rel === "alternate");
         const entryUrl = altLinkObj?.href || "";
-        const entrySlug = entryUrl
-          .split("/")
-          .filter(Boolean)
-          .pop() || "";
+        const entrySlug = entryUrl.split("/").filter(Boolean).pop() || "";
 
         const score = scoreCandidate(title, entrySlug, targetTitle, targetSlug);
         if (score < 30) continue;
 
-        const urls = parseVipBloggerContent(content).filter(isProbablyVideoUrl);
+        const urls = parseVipBloggerContent(content);
         if (!urls.length) continue;
 
         const $content = cheerio.load(content);
         const thumbnail = normalizePoster(
           $content("img").first().attr("src") ||
-          entry?.media$thumbnail?.url ||
+          entry.media$thumbnail?.url ||
           ""
         );
 
@@ -198,94 +195,6 @@ async function findVipBloggerDetailBySearch(seriesUrl, postId) {
 }
 
 /* =========================
-   FETCH VIP WORDPRESS
-========================= */
-async function fetchVipWordpressDetail(seriesUrl, postId) {
-  const cached = POST_INFO.get(postId) || {};
-
-  let pageHtml = cached.pageHtml;
-  if (!pageHtml) {
-    const { data } = await axiosClient.get(seriesUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        Referer: seriesUrl
-      }
-    });
-    pageHtml = data;
-  }
-
-  const $ = cheerio.load(pageHtml);
-
-  const pageTitle =
-    $("h1.single-post-title .post-title").text().trim() ||
-    $("meta[property='og:title']").attr("content") ||
-    $("title").text().trim();
-
-  let thumbnail =
-    $("meta[property='og:image']").attr("content") ||
-    $("meta[name='twitter:image']").attr("content") ||
-    $("img[post-id]").first().attr("src") ||
-    $("img[post-id]").first().attr("data-src") ||
-    "";
-
-  thumbnail = normalizePoster(thumbnail);
-
-  let urls = extractVideoLinks(pageHtml).filter(isProbablyVideoUrl);
-  if (urls.length) {
-    return {
-      title: pageTitle,
-      thumbnail,
-      urls: [...new Set(urls)]
-    };
-  }
-
-  const scripts = $("script")
-    .map((_, el) => $(el).html() || "")
-    .get()
-    .join("\n");
-
-  urls = extractVideoLinks(scripts).filter(isProbablyVideoUrl);
-  if (urls.length) {
-    return {
-      title: pageTitle,
-      thumbnail,
-      urls: [...new Set(urls)]
-    };
-  }
-
-  try {
-    const wpApiUrl = `https://phumikhmer.vip/wp-json/wp/v2/posts/${postId}`;
-    const { data: wpPost } = await axiosClient.get(wpApiUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        Referer: seriesUrl
-      }
-    });
-
-    const rendered = wpPost?.content?.rendered || "";
-    const restUrls = parseVipBloggerContent(rendered).filter(isProbablyVideoUrl);
-
-    if (restUrls.length) {
-      return {
-        title: wpPost?.title?.rendered || pageTitle,
-        thumbnail,
-        urls: [...new Set(restUrls)]
-      };
-    }
-  } catch {}
-
-  const searched = await findVipBloggerDetailBySearch(seriesUrl, postId);
-  if (searched) {
-    if (!searched.thumbnail && thumbnail) {
-      searched.thumbnail = thumbnail;
-    }
-    return searched;
-  }
-
-  return null;
-}
-
-/* =========================
    GET POST ID
 ========================= */
 async function getPostId(url) {
@@ -293,12 +202,25 @@ async function getPostId(url) {
     return URL_TO_POSTID.get(url);
   }
 
-  const { data } = await axiosClient.get(url);
+  const { data } = await axiosClient.get(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0",
+      Referer: url
+    }
+  });
+
   const $ = cheerio.load(data);
 
-  let postId = $("#player").attr("data-post-id");
-  let sourceType = "blogger";
+  let postId = null;
+  let sourceType = null;
 
+  // 1. Original Nuvio / Blogger player path
+  postId = $("#player").attr("data-post-id");
+  if (postId) {
+    sourceType = "blogger";
+  }
+
+  // 2. SundayDrama blogger path
   if (!postId) {
     const fanta = $('div[id="fanta"][data-post-id]').first();
     if (fanta.length) {
@@ -307,6 +229,7 @@ async function getPostId(url) {
     }
   }
 
+  // 3. Blogger feed fallback from page source
   if (!postId) {
     const match = data.match(
       /blogger\.com\/feeds\/\d+\/posts\/default\/(\d+)\?alt=json/i
@@ -317,7 +240,7 @@ async function getPostId(url) {
     }
   }
 
-  // VIP WordPress fallback
+  // 4. VIP WordPress fallback ONLY if no blogger postId was found
   if (!postId) {
     let match = null;
 
@@ -359,23 +282,16 @@ async function getPostId(url) {
     if (m) maxEp = parseInt(m[1], 10);
   }
 
-  let slug = "";
-  let cleanTitle = "";
+  const urlObj = new URL(url);
+  const slug =
+    urlObj.pathname
+      .split("/")
+      .filter(Boolean)
+      .pop() || "";
 
-  try {
-    const urlObj = new URL(url);
-    slug =
-      urlObj.pathname
-        .split("/")
-        .filter(Boolean)
-        .pop() || "";
-  } catch {
-    slug = "";
-  }
-
-  cleanTitle =
+  const cleanTitle =
     $("meta[property='og:title']").attr("content") ||
-    $("h1.entry-title, h1.post-title, h1.single-post-title, title")
+    $("h1.entry-title, h1.post-title, h1.single-post-title, .post-title, title")
       .first()
       .text()
       .trim() ||
@@ -386,7 +302,7 @@ async function getPostId(url) {
   POST_INFO.set(postId, {
     ...(POST_INFO.get(postId) || {}),
     maxEp: maxEp || null,
-    sourceType,
+    sourceType: sourceType || "unknown",
     pageHtml: data,
     slug,
     cleanTitle
@@ -402,10 +318,17 @@ async function fetchFromBlog(blogId, postId) {
   const feedUrl = `https://www.blogger.com/feeds/${blogId}/posts/default/${postId}?alt=json`;
 
   try {
-    const { data } = await axiosClient.get(feedUrl);
+    const { data } = await axiosClient.get(feedUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        Referer: "https://phumikhmer.vip/"
+      }
+    });
 
     const title = data?.entry?.title?.$t || "";
     const content = data?.entry?.content?.$t || "";
+    if (!content) return null;
+
     const $content = cheerio.load(content);
 
     let thumbnail =
@@ -417,7 +340,7 @@ async function fetchFromBlog(blogId, postId) {
 
     thumbnail = normalizePoster(thumbnail);
 
-    let urls = parseVipBloggerContent(content).filter(isProbablyVideoUrl);
+    let urls = parseVipBloggerContent(content);
 
     if (!urls.length) {
       const hasOkEmbed = /\{embed\s*=\s*ok\}/i.test(content);
@@ -436,6 +359,99 @@ async function fetchFromBlog(blogId, postId) {
   } catch {
     return null;
   }
+}
+
+/* =========================
+   FETCH VIP WORDPRESS
+========================= */
+async function fetchVipWordpressDetail(seriesUrl, postId) {
+  const cached = POST_INFO.get(postId) || {};
+
+  let pageHtml = cached.pageHtml;
+  if (!pageHtml) {
+    const { data } = await axiosClient.get(seriesUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        Referer: seriesUrl
+      }
+    });
+    pageHtml = data;
+  }
+
+  const $ = cheerio.load(pageHtml);
+
+  const pageTitle =
+    $("h1.single-post-title .post-title").text().trim() ||
+    $("h1.single-post-title").text().trim() ||
+    $("meta[property='og:title']").attr("content") ||
+    $("title").text().trim();
+
+  let thumbnail =
+    $("meta[property='og:image']").attr("content") ||
+    $("meta[name='twitter:image']").attr("content") ||
+    $("img[post-id]").first().attr("data-src") ||
+    $("img[post-id]").first().attr("src") ||
+    "";
+
+  thumbnail = normalizePoster(thumbnail);
+
+  // 1. direct page scan
+  let urls = extractVideoLinks(pageHtml).filter(isProbablyVideoUrl);
+  if (urls.length) {
+    return {
+      title: pageTitle,
+      thumbnail,
+      urls: [...new Set(urls)]
+    };
+  }
+
+  // 2. inline scripts scan
+  const scripts = $("script")
+    .map((_, el) => $(el).html() || "")
+    .get()
+    .join("\n");
+
+  urls = extractVideoLinks(scripts).filter(isProbablyVideoUrl);
+  if (urls.length) {
+    return {
+      title: pageTitle,
+      thumbnail,
+      urls: [...new Set(urls)]
+    };
+  }
+
+  // 3. wp-json post content scan
+  try {
+    const wpApiUrl = `https://phumikhmer.vip/wp-json/wp/v2/posts/${postId}`;
+    const { data: wpPost } = await axiosClient.get(wpApiUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        Referer: seriesUrl
+      }
+    });
+
+    const rendered = wpPost?.content?.rendered || "";
+    const restUrls = extractVideoLinks(rendered).filter(isProbablyVideoUrl);
+
+    if (restUrls.length) {
+      return {
+        title: wpPost?.title?.rendered || pageTitle,
+        thumbnail,
+        urls: [...new Set(restUrls)]
+      };
+    }
+  } catch {}
+
+  // 4. blogger search fallback
+  const searched = await findVipBloggerDetailBySearch(seriesUrl, postId);
+  if (searched) {
+    if (!searched.thumbnail && thumbnail) {
+      searched.thumbnail = thumbnail;
+    }
+    return searched;
+  }
+
+  return null;
 }
 
 /* =========================
