@@ -289,44 +289,52 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
 
   thumbnail = normalizePoster(thumbnail);
 
-  const vipBlogs = [BLOG_IDS.ONELEGEND, BLOG_IDS.KOLAB];
+  // 1) Direct page HTML scan first
+  let urls = extractVideoLinks(pageHtml);
+  console.log("[VIP] pageHtml direct urls:", urls);
 
-  const entries = await Promise.all(
-    vipBlogs.map(async (blogId) => {
-      const entry = await fetchBloggerJson(blogId, postId);
-       console.log("[VIP] blogId:", blogId, "postId:", postId, "found:", !!entry);
-       return entry;
-    })
-  );
+  if (!urls.length) {
+    // 2) Scan inline scripts for clues
+    const scripts = $("script")
+      .map((_, el) => $(el).html() || "")
+      .get()
+      .join("\n");
 
-  for (const entry of entries) {
-    if (!entry) continue;
+    urls = extractVideoLinks(scripts);
+    console.log("[VIP] inline script urls:", urls);
+  }
 
-    const title = entry.title?.$t || pageTitle;
-    const content = entry.content?.$t || "";
-
-    console.log("[VIP] entry title:", title);
-    console.log("[VIP] content preview:", content.slice(0, 1000));
-
-    const urls = parseVipBloggerContent(content);
-    console.log("[VIP] parsed urls:", urls);
-
-    if (!urls.length) continue;
-
-    if (!thumbnail) {
-      const $content = cheerio.load(content);
-      thumbnail = normalizePoster(
-        $content("img").first().attr("src") ||
-        entry.media$thumbnail?.url ||
-        ""
-      );
-    }
-
+  if (urls.length) {
     return {
-      title,
+      title: pageTitle,
       thumbnail,
-      urls
+      urls: [...new Set(urls)]
     };
+  }
+
+  // 3) Try WordPress REST post endpoint
+  try {
+    const wpApiUrl = `https://phumikhmer.vip/wp-json/wp/v2/posts/${postId}`;
+    const { data: wpPost } = await axiosClient.get(wpApiUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        Referer: seriesUrl
+      }
+    });
+
+    const rendered = wpPost?.content?.rendered || "";
+    const restUrls = extractVideoLinks(rendered);
+    console.log("[VIP] wp-json rendered urls:", restUrls);
+
+    if (restUrls.length) {
+      return {
+        title: wpPost?.title?.rendered || pageTitle,
+        thumbnail,
+        urls: [...new Set(restUrls)]
+      };
+    }
+  } catch (err) {
+    console.log("[VIP] wp-json post fetch failed");
   }
 
   return null;
@@ -418,26 +426,41 @@ async function getEpisodes(prefix, seriesUrl) {
 
 
   if (!detail) {
-    return [];
+  // VIP fallback: try direct page extraction one more time
+  if (prefix === "vip") {
+    try {
+      const { data } = await axiosClient.get(seriesUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0",
+          Referer: seriesUrl
+        }
+      });
+
+      const fallbackUrls = extractVideoLinks(data);
+      console.log("[VIP] fallback episode urls:", fallbackUrls);
+
+      if (fallbackUrls.length) {
+        const $ = cheerio.load(data);
+        const poster =
+          $("meta[property='og:image']").attr("content") ||
+          $("meta[name='twitter:image']").attr("content") ||
+          "";
+
+        return fallbackUrls.map((url, index) => ({
+          id: `${prefix}:${encodeURIComponent(seriesUrl)}:1:${index + 1}`,
+          title: `Episode ${index + 1}`,
+          season: 1,
+          episode: index + 1,
+          thumbnail: normalizePoster(poster),
+          released: new Date().toISOString(),
+        }));
+      }
+    } catch {}
   }
 
-  const maxEp = POST_INFO.get(postId)?.maxEp || null;
-
-  let urls = [...new Set(detail.urls)];
-
-  if (maxEp && urls.length > maxEp) {
-    urls = urls.slice(0, maxEp);
-  }
-
-  return urls.map((url, index) => ({
-    id: `${prefix}:${encodeURIComponent(seriesUrl)}:1:${index + 1}`,
-    title: `Episode ${index + 1}`,
-    season: 1,
-    episode: index + 1,
-    thumbnail: detail.thumbnail,
-    released: new Date().toISOString(),
-  }));
+  return [];
 }
+
 
 /* =========================
    STREAM
