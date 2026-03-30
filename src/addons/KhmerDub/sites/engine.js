@@ -381,7 +381,7 @@ async function getEpisodes(prefix, seriesUrl) {
   const postId = await getPostId(seriesUrl);
 
   // Sunday playlist
-  if (!postId && prefix === "sunday") {  
+  if (!postId && prefix === "sunday") {
     const { data } = await axiosClient.get(seriesUrl);
 
     FILE_REGEX.lastIndex = 0;
@@ -393,7 +393,7 @@ async function getEpisodes(prefix, seriesUrl) {
       urls.push(match[1]);
     }
 
-    const $ = cheerio.load(data);	
+    const $ = cheerio.load(data);
     const pagePoster =
       $("meta[property='og:image']").attr("content") ||
       $("link[rel='image_src']").attr("href") ||
@@ -416,7 +416,7 @@ async function getEpisodes(prefix, seriesUrl) {
   }
 
   const detail = await getStreamDetail(postId, seriesUrl);
-  
+
   console.log("[EPISODES]", {
     prefix,
     seriesUrl,
@@ -424,41 +424,66 @@ async function getEpisodes(prefix, seriesUrl) {
     detail
   });
 
-
+  // =========================
+  // VIP FALLBACK
+  // =========================
   if (!detail) {
-  // VIP fallback: try direct page extraction one more time
-  if (prefix === "vip") {
-    try {
-      const { data } = await axiosClient.get(seriesUrl, {
-        headers: {
-          "User-Agent": "Mozilla/5.0",
-          Referer: seriesUrl
+    if (prefix === "vip") {
+      try {
+        const { data } = await axiosClient.get(seriesUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0",
+            Referer: seriesUrl
+          }
+        });
+
+        const fallbackUrls = extractVideoLinks(data);
+        console.log("[VIP] fallback episode urls:", fallbackUrls);
+
+        if (fallbackUrls.length) {
+          const $ = cheerio.load(data);
+          const poster =
+            $("meta[property='og:image']").attr("content") ||
+            $("meta[name='twitter:image']").attr("content") ||
+            "";
+
+          return fallbackUrls.map((url, index) => ({
+            id: `${prefix}:${encodeURIComponent(seriesUrl)}:1:${index + 1}`,
+            title: `Episode ${index + 1}`,
+            season: 1,
+            episode: index + 1,
+            thumbnail: normalizePoster(poster),
+            released: new Date().toISOString(),
+          }));
         }
-      });
-
-      const fallbackUrls = extractVideoLinks(data);
-      console.log("[VIP] fallback episode urls:", fallbackUrls);
-
-      if (fallbackUrls.length) {
-        const $ = cheerio.load(data);
-        const poster =
-          $("meta[property='og:image']").attr("content") ||
-          $("meta[name='twitter:image']").attr("content") ||
-          "";
-
-        return fallbackUrls.map((url, index) => ({
-          id: `${prefix}:${encodeURIComponent(seriesUrl)}:1:${index + 1}`,
-          title: `Episode ${index + 1}`,
-          season: 1,
-          episode: index + 1,
-          thumbnail: normalizePoster(poster),
-          released: new Date().toISOString(),
-        }));
+      } catch (err) {
+        console.log("[VIP] fallback error:", err.message);
       }
-    } catch {}
+    }
+
+    return [];
   }
 
-  return [];
+  // =========================
+  // NORMAL FLOW
+  // =========================
+  const maxEp = POST_INFO.get(postId)?.maxEp || null;
+
+  let urls = [...new Set(detail.urls)];
+
+  // Keep disabled while debugging VIP
+  // if (maxEp && urls.length > maxEp) {
+  //   urls = urls.slice(0, maxEp);
+  // }
+
+  return urls.map((url, index) => ({
+    id: `${prefix}:${encodeURIComponent(seriesUrl)}:1:${index + 1}`,
+    title: `Episode ${index + 1}`,
+    season: 1,
+    episode: index + 1,
+    thumbnail: detail.thumbnail,
+    released: new Date().toISOString(),
+  }));
 }
 
 
