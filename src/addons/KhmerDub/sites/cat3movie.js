@@ -148,10 +148,8 @@ async function getCatalogItems(prefix, siteConfig, url) {
 
       return {
         id: `${prefix}:${encodeURIComponent(link)}`,
-        name: title,
-        poster,
-        genres: category ? [category] : [],
-        description: category ? `Category: ${category}` : ""
+        name: category ? `[${category}] ${title}` : title,
+        poster
       };
     });
 
