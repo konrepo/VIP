@@ -267,6 +267,7 @@ builder.defineMetaHandler(async ({ id }) => {
           name: first.title,
           poster: first.thumbnail,
           background: first.thumbnail,
+          description: first.title
         },
       };
     }

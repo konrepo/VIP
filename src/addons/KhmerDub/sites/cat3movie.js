@@ -71,8 +71,6 @@ async function getDetail(url) {
       headers: HEADERS
     });
 
-    console.log("[cat3] HTML snippet:", data.slice(0, 1000));
-
     const $ = cheerio.load(data);
 
     const title = cleanMovieTitle(
@@ -88,14 +86,24 @@ async function getDetail(url) {
 
     poster = normalizePoster(absolutize(poster, url));
 
+    const category =
+      $('nav[aria-label="Breadcrumbs"] .bf-breadcrumb-item a')
+        .last()
+        .text()
+        .trim() ||
+      $(".term-badges.floated .term-badge a").first().text().trim() ||
+      "";
+
     const sources = extractSources(data);
 
     console.log("[cat3] Title:", title);
+    console.log("[cat3] Category:", category);
     console.log("[cat3] Sources found:", sources);
 
     return {
       title,
       poster,
+      category,
       sources
     };
   } catch (e) {
@@ -103,6 +111,7 @@ async function getDetail(url) {
     return null;
   }
 }
+
 /* =========================
    CATALOG
 ========================= */
@@ -182,7 +191,7 @@ async function getEpisodes(prefix, url) {
   return [
     {
       id: `${prefix}:${encodeURIComponent(url)}`,
-      title: detail.title,
+      title: detail.category ? `[${detail.category}] ${detail.title}` : detail.title,
       season: 1,
       episode: 1,
       thumbnail: detail.poster
