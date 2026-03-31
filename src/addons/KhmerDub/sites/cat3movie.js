@@ -211,46 +211,65 @@ async function getStream(prefix, url, epNum = 1) {
 
     const streams = [];
 
-    // ✅ 1. Extract server links
+    // 1. Server list links
     $("#server-list a").each((i, el) => {
       const link = $(el).attr("href");
       const label = $(el).text().trim() || `Server ${i + 1}`;
 
       if (link && /^https?:\/\//i.test(link)) {
-        streams.push(
-          buildStream(
-            link,
-            epNum,
-            `${label}`,
-            "Cat3Movie",
-            "cat3"
-          )
-        );
+        streams.push({
+          title: `Cat3Movie - ${label}`,
+          url: link
+        });
       }
     });
 
-    // ✅ 2. Fallback to JWPlayer (your old logic)
+    // 2. iframe fallback
+    if (!streams.length) {
+      const iframeSrc = $("#movie-player iframe").attr("src");
+      if (iframeSrc && /^https?:\/\//i.test(iframeSrc)) {
+        streams.push({
+          title: "Cat3Movie - Server 1",
+          url: iframeSrc
+        });
+      }
+    }
+
+    // 3. direct file fallback
     if (!streams.length) {
       const detail = await getDetail(url);
 
-      if (!detail?.sources?.length) return null;
-
-      const streamUrl = detail.sources[0];
-
-      streams.push(
-        buildStream(
-          streamUrl,
-          epNum,
-          detail.title,
-          "Cat3Movie",
-          "cat3"
-        )
-      );
+      if (detail?.sources?.length) {
+        detail.sources.forEach((src, i) => {
+          streams.push(
+            buildStream(
+              src,
+              epNum,
+              `${detail.title} - Server ${i + 1}`,
+              "Cat3Movie",
+              "cat3"
+            )
+          );
+        });
+      }
     }
 
-    console.log("[cat3] Streams:", streams.length);
+    // Convert raw iframe/server links to stream objects
+    const finalStreams = streams.map((s, i) => {
+      if (s.behaviorHints || s.name) return s;
 
-    return streams.length ? streams : null;
+      return {
+        name: s.title || `Cat3Movie - Server ${i + 1}`,
+        title: s.title || `Cat3Movie - Server ${i + 1}`,
+        url: s.url,
+        behaviorHints: {
+          notWebReady: false
+        }
+      };
+    });
+
+    console.log("[cat3] Streams:", finalStreams.length);
+    return finalStreams.length ? finalStreams : null;
 
   } catch (e) {
     console.log("[cat3] getStream error:", e.message);
