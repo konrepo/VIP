@@ -211,31 +211,42 @@ async function getStream(prefix, url, epNum = 1) {
 
     const streams = [];
 
-    // 1. Server list links
+    // =========================
+    // 1. SERVER LIST (BEST)
+    // =========================
     $("#server-list a").each((i, el) => {
       const link = $(el).attr("href");
       const label = $(el).text().trim() || `Server ${i + 1}`;
 
       if (link && /^https?:\/\//i.test(link)) {
         streams.push({
+          name: `Cat3Movie - ${label}`,
           title: `Cat3Movie - ${label}`,
-          url: link
+          url: link,
+          behaviorHints: { notWebReady: false }
         });
       }
     });
 
-    // 2. iframe fallback
+    // =========================
+    // 2. IFRAME FALLBACK
+    // =========================
     if (!streams.length) {
       const iframeSrc = $("#movie-player iframe").attr("src");
+
       if (iframeSrc && /^https?:\/\//i.test(iframeSrc)) {
         streams.push({
+          name: "Cat3Movie - Server 1",
           title: "Cat3Movie - Server 1",
-          url: iframeSrc
+          url: iframeSrc,
+          behaviorHints: { notWebReady: false }
         });
       }
     }
 
-    // 3. direct file fallback
+    // =========================
+    // 3. DIRECT FILE FALLBACK
+    // =========================
     if (!streams.length) {
       const detail = await getDetail(url);
 
@@ -254,22 +265,8 @@ async function getStream(prefix, url, epNum = 1) {
       }
     }
 
-    // Convert raw iframe/server links to stream objects
-    const finalStreams = streams.map((s, i) => {
-      if (s.behaviorHints || s.name) return s;
-
-      return {
-        name: s.title || `Cat3Movie - Server ${i + 1}`,
-        title: s.title || `Cat3Movie - Server ${i + 1}`,
-        url: s.url,
-        behaviorHints: {
-          notWebReady: false
-        }
-      };
-    });
-
-    console.log("[cat3] Streams:", finalStreams.length);
-    return finalStreams.length ? finalStreams : null;
+    console.log("[cat3] Streams:", streams.length);
+    return streams.length ? streams : null;
 
   } catch (e) {
     console.log("[cat3] getStream error:", e.message);
