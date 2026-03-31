@@ -186,12 +186,13 @@ function getNextPageUrl(base, html) {
 ========================= */
 async function getEpisodes(prefix, url) {
   const detail = await getDetail(url);
-  if (!detail?.sources?.length) return [];
+
+  if (!detail) return [];
 
   return [
     {
       id: `${prefix}:${encodeURIComponent(url)}`,
-      title: detail.category ? `[${detail.category}] ${detail.title}` : detail.title,
+      title: detail.title,
       season: 1,
       episode: 1,
       thumbnail: detail.poster
