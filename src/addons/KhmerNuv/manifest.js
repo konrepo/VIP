@@ -1,13 +1,13 @@
-const TYPE = "series";
 const EXTRA = ["search", "skip"];
 
 const sites = [
-  { id: "vip", name: "PhumiVip-TEST" },
-  { id: "sunday", name: "SundayDrama-TEST" },
-  { id: "phumi2", name: "PhumiClub-TEST" },  
-  { id: "khmerave", name: "KhmerAve-TEST" },
-  { id: "merlkon", name: "Merlkon-TEST" },
-  { id: "idrama", name: "iDramaHD-TEST" },
+  { id: "vip", name: "PhumiVip-TEST", type: "series" },
+  { id: "sunday", name: "SundayDrama-TEST", type: "series" },
+  { id: "phumi2", name: "PhumiClub-TEST", type: "series" },
+  { id: "khmerave", name: "KhmerAve-TEST", type: "series" },
+  { id: "merlkon", name: "Merlkon-TEST", type: "series" },
+  { id: "idrama", name: "iDramaHD-TEST", type: "series" },
+  { id: "cat3movie", name: "Cat3Movie-TEST", type: "movie" }
 ];
 
 module.exports = {
@@ -18,18 +18,17 @@ module.exports = {
   logo: "https://raw.githubusercontent.com/konrepo/VIP/refs/heads/main/test.png",
 
   resources: ["catalog", "meta", "stream"],
-  types: [TYPE],
-  idPrefixes: sites.map(s => s.id),
+  types: ["series", "movie"],
+  idPrefixes: sites.map((s) => s.id),
 
   catalogs: sites.map((site) => ({
-    type: TYPE,
+    type: site.type,
     id: site.id,
     name: site.name,
-    extraSupported: EXTRA,
+    extraSupported: EXTRA
   })),
 
   behaviorHints: {
-    configurable: false,
-    adult: false,
-  },
+    configurable: false
+  }
 };
