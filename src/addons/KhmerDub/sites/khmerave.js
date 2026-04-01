@@ -222,9 +222,6 @@ async function resolveOkRuToDirect(iframeUrl, ua) {
       .replace(/\\&/g, "&")
       .replace(/\\\//g, "/");
 
-
-    console.log("[OK URL]", okUrl);
-
     const debugKeys = [
       "ondemandHls",
       "hlsMasterPlaylistUrl",
@@ -239,20 +236,6 @@ async function resolveOkRuToDirect(iframeUrl, ua) {
       "metadata"
     ];
 
-    for (const key of debugKeys) {
-      const idx = html.indexOf(key);
-      console.log(`[OK key ${key}]`, idx);
-      if (idx !== -1) {
-        console.log(
-          `[OK snippet ${key}]`,
-          html.slice(Math.max(0, idx - 250), idx + 800)
-        );
-      }
-    }
-	
-	
-	
-    console.log("[OK HTML sample]", String(html).slice(0, 1000));
     let match = null;
 
     const patterns = [
@@ -290,7 +273,6 @@ async function resolveOkRuToDirect(iframeUrl, ua) {
           .replace(/\\\//g, "/")
           .replace(/&amp;/g, "&");
 
-        console.log("[OK video-array resolved]", directUrl);
         return directUrl;
       }
 
@@ -300,8 +282,6 @@ async function resolveOkRuToDirect(iframeUrl, ua) {
     const cleanUrl = match[1]
       .replace(/\\u0026/g, "&")
       .replace(/\\&/g, "&");
-
-    console.log("[OK matched URL]", cleanUrl);
 
     // If this is a metadata URL, fetch real m3u8
     if (/metadata/i.test(cleanUrl) && /^https?:\/\//i.test(cleanUrl)) {
@@ -335,7 +315,6 @@ async function resolveOkRuToDirect(iframeUrl, ua) {
             .replace(/\\&/g, "&")
             .replace(/\\\//g, "/");
 
-          console.log("[OK metadata resolved]", finalUrl);
           return finalUrl;
         }
       } catch (e) {
@@ -400,13 +379,10 @@ async function getStream(prefix, seriesUrl, episode) {
     if (!candidate) return null;
 
     const cand = normalizeOkUrl(candidate);
-	console.log("[KhmerAve candidate]", cand);
 
     if (cand.includes("ok.ru")) {
-	  console.log("[KhmerAve OK candidate]", cand);
 	  
       const direct = await resolveOkRuToDirect(cand, UA_MOB);
-	  console.log("[KhmerAve OK resolved]", direct);
 	  
       if (!direct) return null;
 
