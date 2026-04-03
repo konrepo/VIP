@@ -164,7 +164,9 @@ async function getCatalogItems(prefix, siteConfig, url) {
 
     const $ = cheerio.load(data);
 
-    const items = $(".thumb-block").toArray();
+    const items = $(".thumb-block")
+      .not(".video-suggest")
+      .toArray();
 
     const results = items
       .map((el) => {

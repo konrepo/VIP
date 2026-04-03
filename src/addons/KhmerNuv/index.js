@@ -334,6 +334,46 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
       CATALOG_CACHE.set(cacheKey, result);
       return result;
     }
+
+    // xVideos: custom next-page pagination
+    if (id === "xvideos") {
+      const base = String(site.baseUrl || "").replace(/\/$/, "");
+      const SKIP_STEP = 100;
+
+      const skip = Number(extra?.skip || 0);
+      const targetPage = Math.floor(skip / SKIP_STEP) + 1;
+
+      cacheKey = `catalog:${id}:${extra?.search || ""}:page:${targetPage}`;
+
+      const cached = CATALOG_CACHE.get(cacheKey);
+      if (cached) return cached;
+
+      let url;
+
+      if (extra?.search) {
+        // search pattern may need adjustment if xvideos search paging differs
+        url = targetPage === 1
+          ? `${base}/?k=${encodeURIComponent(extra.search)}`
+          : `${base}/?k=${encodeURIComponent(extra.search)}&p=${targetPage}`;
+      } else {
+        url = targetPage === 1
+          ? `${base}/new`
+          : `${base}/new/${targetPage - 1}`;
+      }
+
+      const items = await siteEngine.getCatalogItems(id, site, url);
+      if (!items.length) return { metas: [] };
+
+      const fixed = applyMetaId(items, id);
+
+      const result = {
+        metas: mapMetas(fixed, "movie"),
+        cacheMaxAge: 3600
+      };
+
+      CATALOG_CACHE.set(cacheKey, result);
+      return result;
+    }
 	
     // VIP / iDrama: normal paging
     const WEBSITE_PAGE_SIZE = site.pageSize || 30;

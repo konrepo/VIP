@@ -55,7 +55,7 @@ module.exports = Object.freeze({
   },
   
   xvideos: {
-    pageSize: 40,
+    pageSize: 48,
     baseUrl: "https://www.xvideos.com"
   }
   
