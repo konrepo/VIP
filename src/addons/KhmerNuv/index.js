@@ -364,8 +364,8 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
           : `${base}/?k=${encodeURIComponent(extra.search)}&p=${targetPage}`;
       } else {
         url = targetPage === 1
-          ? `${base}/new`
-          : `${base}/new/${targetPage}`;
+          ? `${base}/`
+          : `${base}/new/${targetPage - 1}`;
       }
 
       if (DEBUG) {
