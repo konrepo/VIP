@@ -1,28 +1,30 @@
-const EXTRA = ["search", "skip"];
+const EXTRA = ["search"];
 
 const sites = [
-  { id: "vip", name: "PhumiVip-TEST", type: "series" },
-  { id: "sunday", name: "SundayDrama-TEST", type: "series" },
-  { id: "phumi2", name: "PhumiClub-TEST", type: "series" },
-  { id: "khmerave", name: "KhmerAve-TEST", type: "series" },
-  { id: "merlkon", name: "Merlkon-TEST", type: "series" },
-  { id: "idrama", name: "iDramaHD-TEST", type: "series" },
-  { id: "cat3movie", name: "Cat3Movie-TEST", type: "movie" },
-  { id: "xvideos", name: "xVideos-TEST", type: "movie" }  
+  { id: "vip", name: "PhumiVip", type: "series", enabled: true },
+  { id: "sunday", name: "SundayDrama", type: "series", enabled: true },
+  { id: "phumi2", name: "PhumiClub", type: "series", enabled: true },
+  { id: "khmerave", name: "KhmerAve", type: "series", enabled: true },
+  { id: "merlkon", name: "Merlkon", type: "series", enabled: true },
+  { id: "idrama", name: "iDramaHD", type: "series", enabled: true },
+  { id: "cat3movie", name: "Cat3Movie", type: "movie", enabled: false }
 ];
 
+const enabled = sites.filter(site => site.enabled !== false);
+
 module.exports = {
-  id: "community.khmer.test",
-  version: "3.5.0-test",
-  name: "Nuvio Test",
-  description: "Stream Experimental Build NUVIO | Dev: TheDevilz.",
-  logo: "https://raw.githubusercontent.com/konrepo/VIP/refs/heads/main/test.png",
+  id: "community.khmer.nuvio",
+  version: "4.2.0",
+  name: "KhmerNuv",
+  description: "Stream Asian dramas dubbed in Khmer (Nuvio App) | By: TheDevilz.",
+  logo: "https://avatars.githubusercontent.com/u/32822347?v=4",
 
   resources: ["catalog", "meta", "stream"],
   types: ["series", "movie"],
-  idPrefixes: sites.map((s) => s.id),
 
-  catalogs: sites.map((site) => ({
+  idPrefixes: enabled.map(s => `${s.id}:`),
+
+  catalogs: enabled.map(site => ({
     type: site.type,
     id: site.id,
     name: site.name,

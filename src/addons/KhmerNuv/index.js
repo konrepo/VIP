@@ -1,13 +1,16 @@
 const { addonBuilder } = require("stremio-addon-sdk");
 const manifest = require("./manifest");
+const crypto = require("crypto");
 const DEBUG = false;
-const MOVIE_SITES = ["cat3movie", "xvideos"];
+
+const enabledSites = new Set(
+  manifest.catalogs.map(c => c.id)
+);
 
 const engine = require("./sites/engine");
 const khmerave = require("./sites/khmerave");
 const phumi2 = require("./sites/phumi2");
 const cat3movie = require("./sites/cat3movie");
-const xvideos = require("./sites/xvideos");
 
 const PAGE_TRACKER = new Map();
 const PAGE_URL_CACHE = new Map();
@@ -21,12 +24,22 @@ const { normalizePoster, mapMetas, uniqById } = require("./utils/helpers");
 //const { makeMetaId } = require("./utils/hash");
 const { URL_CACHE, EP_CACHE, CATALOG_CACHE } = require("./utils/cache");
 
+function makeMetaId(prefix, url) {
+  const hash = crypto
+    .createHash("md5")
+    .update(`${prefix}:${url}`)
+    .digest("hex")
+    .slice(0, 16);
+
+  return `${prefix}:${hash}`;
+}
+
 function applyMetaId(items, prefix) {
   return items.map(item => {
     const url = item.id || item.url;
     if (typeof url !== "string" || !url.trim()) return null;
 
-    const metaId = `${prefix}:${encodeURIComponent(url)}`;
+    const metaId = makeMetaId(prefix, url);
     URL_CACHE.set(metaId, url);
 
     return {
@@ -40,16 +53,17 @@ const TYPE = "series";
 
 const ENGINES = {
   vip: engine,
-  sunday: engine,  
+  sunday: engine,
   idrama: engine,
   khmerave,
   merlkon: khmerave,
   phumi2,
-  cat3movie,
-  xvideos,
+  cat3movie
 };
 
 function getSiteEngine(id) {
+  if (!enabledSites.has(id)) return null;
+
   const site = sites[id];
   const engine = ENGINES[id];
 
@@ -68,7 +82,7 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
     let cacheKey;
 
     // Phumi2 uses normalized paging -> custom cache key later
-    if (id !== "phumi2" && id !== "cat3movie" && id !== "xvideos") {
+    if (id !== "phumi2" && id !== "cat3movie") {
       cacheKey = `catalog:${id}:${JSON.stringify(extra || {})}`;
       const cached = CATALOG_CACHE.get(cacheKey);
       if (cached) return cached;
@@ -334,65 +348,6 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
       CATALOG_CACHE.set(cacheKey, result);
       return result;
     }
-
-    // xVideos: custom next-page pagination
-    if (id === "xvideos") {
-      const base = String(site.baseUrl || "").replace(/\/$/, "");
-      const SKIP_STEP = 100;
-
-      const skip = Number(extra?.skip || 0);
-      const targetPage = Math.floor(skip / SKIP_STEP) + 1;
-
-      if (DEBUG) {
-        console.log("[XVIDEOS] PAGINATION:", {
-          skip,
-          targetPage,
-          search: extra?.search || null
-        });
-      }
-
-      cacheKey = `catalog:${id}:${extra?.search || ""}:page:${targetPage}`;
-
-      const cached = CATALOG_CACHE.get(cacheKey);
-      if (cached) return cached;
-
-      let url;
-
-      if (extra?.search) {
-        url = targetPage === 1
-          ? `${base}/?k=${encodeURIComponent(extra.search)}`
-          : `${base}/?k=${encodeURIComponent(extra.search)}&p=${targetPage}`;
-      } else {
-        url = targetPage === 1
-          ? `${base}/`
-          : `${base}/new/${targetPage - 1}`;
-      }
-
-      if (DEBUG) {
-        console.log("[XVIDEOS] URL:", url);
-      }
-
-      const items = await siteEngine.getCatalogItems(id, site, url);
-
-      if (DEBUG) {
-        console.log("[XVIDEOS] ITEMS:", {
-          count: items.length,
-          page: targetPage
-        });
-      }
-
-      if (!items.length) return { metas: [] };
-
-      const fixed = applyMetaId(items, id);
-
-      const result = {
-        metas: mapMetas(fixed, "movie"),
-        cacheMaxAge: 3600
-      };
-
-      CATALOG_CACHE.set(cacheKey, result);
-      return result;
-    }
 	
     // VIP / iDrama: normal paging
     const WEBSITE_PAGE_SIZE = site.pageSize || 30;
@@ -446,7 +401,7 @@ builder.defineMetaHandler(async ({ id }) => {
 
     const parts = id.split(":");
     const prefix = parts[0];
-    const metaType = MOVIE_SITES.includes(prefix) ? "movie" : TYPE;
+    const metaType = prefix === "cat3movie" ? "movie" : TYPE;
 
     const ctx = getSiteEngine(prefix);
     if (!ctx) return { meta: null };
@@ -514,7 +469,7 @@ builder.defineMetaHandler(async ({ id }) => {
         description: (first.title || "KhmerDub").replace(/\[.*?\]/g, ""),
         poster: first.thumbnail,
         background: first.thumbnail,
-        videos: MOVIE_SITES.includes(prefix)
+        videos: prefix === "cat3movie"
           ? [{
               id: `${id}:1`,
               title: cleanName,
@@ -530,7 +485,7 @@ builder.defineMetaHandler(async ({ id }) => {
               thumbnail: ep.thumbnail
             })),
       },
-    };
+    };;
   } catch (err) {
     console.error("meta error:", err);
     return { meta: null };
@@ -542,35 +497,25 @@ builder.defineMetaHandler(async ({ id }) => {
 ========================= */
 builder.defineStreamHandler(async ({ id }) => {
   try {
-    const parts = id.split(":");
-    if (parts.length < 2) return { streams: [] };
+    let metaId = id;
+    let epNum = 1;
 
-    const episode = parts.pop();
-    const metaId = parts.join(":");
+    const parts = String(id || "").split(":");
+    const last = parts[parts.length - 1];
 
-    const epNum = Number(episode);
-    if (!Number.isInteger(epNum) || epNum <= 0) {
-      return { streams: [] };
+    // Accept episode IDs like vip:abcd1234:12
+    if (/^\d+$/.test(last) && parts.length >= 3) {
+      epNum = Number(last);
+      metaId = parts.slice(0, -1).join(":");
     }
 
-    const metaParts = metaId.split(":");
-    const prefix = metaParts[0];
-
+    const prefix = metaId.split(":")[0];
     const ctx = getSiteEngine(prefix);
     if (!ctx) return { streams: [] };
 
-    const { site, engine: siteEngine } = ctx;
+    const { engine: siteEngine } = ctx;
 
     let seriesUrl = URL_CACHE.get(metaId);
-
-    if (!seriesUrl && metaParts.length > 1) {
-      try {
-        seriesUrl = decodeURIComponent(metaParts.slice(1).join(":"));
-      } catch {
-        seriesUrl = null;
-      }
-    }
-
     if (!seriesUrl) return { streams: [] };
 
     let episodes = EP_CACHE.get(metaId);
@@ -597,22 +542,19 @@ builder.defineStreamHandler(async ({ id }) => {
     }
 
     let ep = episodes.find(e => e.episode === epNum);
-    if (!ep && epNum - 1 >= 0 && epNum - 1 < episodes.length) {
-      ep = episodes[epNum - 1];
-    }
+
+    // Fallback: if Fusion sends only parent ID, try first episode
+    if (!ep) ep = episodes[0];
     if (!ep) return { streams: [] };
 
     let stream;
-
     if (prefix === "khmerave" || prefix === "merlkon") {
-      stream = await khmerave.getStream(prefix, ep.url, ep.episode);
+      stream = await khmerave.getStream(prefix, ep.url, ep.episode || epNum);
     } else {
-      stream = await siteEngine.getStream(prefix, ep.url, epNum);
+      stream = await siteEngine.getStream(prefix, ep.url, ep.episode || epNum);
     }
 
-    if (!stream) return { streams: [] };
-
-    return { streams: [stream] };
+    return stream ? { streams: [stream] } : { streams: [] };
   } catch (err) {
     console.error("stream error:", err);
     return { streams: [] };

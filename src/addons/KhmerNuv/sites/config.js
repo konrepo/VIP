@@ -52,11 +52,5 @@ module.exports = Object.freeze({
   cat3movie: {
     pageSize: 40,
     baseUrl: "https://www.cat3movie.club"
-  },
-  
-  xvideos: {
-    pageSize: 27,
-    baseUrl: "https://www.xvideos.com"
   }
-  
 });
