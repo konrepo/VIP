@@ -8,12 +8,6 @@ const CHANNELS = [
     resolve: true
   },
   {
-    title: "ETV",
-    link: "https://live-evg17.tv360.metfone.com.kh/LiveApp/streams/eacnews.m3u8",
-    thumbnail: "https://ia801501.us.archive.org/19/items/dog_gear_live_Logo/etv-channel.jpg",
-    resolve: true
-  },
-  {
     title: "KhmerTV",
     link: "https://livefta.malimarcdn.com/ftaedge00/khmertv2020.stream/chunklist.m3u8",
     thumbnail: "https://www.phumi7.net/uploads/tv/khmertv.png",
@@ -68,8 +62,6 @@ async function getCatalogItems(prefix) {
 
 /* =========================
    EPISODES
-   Returns one playable item so it also works
-   if you keep this provider as "series".
 ========================= */
 async function getEpisodes(prefix, seriesUrl) {
   const channel = findChannelByUrl(seriesUrl);
