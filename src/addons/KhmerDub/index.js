@@ -56,6 +56,14 @@ builder.defineCatalogHandler(async ({ id, extra }) => {
     if (!ctx) return { metas: [] };
 
     const { site, engine: siteEngine } = ctx;
+	
+	if (id === "khmertv") {
+      const skip = Number(extra?.skip || 0);
+      if (skip > 0) return { metas: [] };
+
+      const items = await siteEngine.getCatalogItems(id, site, "");
+      return { metas: mapMetas(items, "movie") };
+	}
 
     if (extra?.search && (id === "khmerave" || id === "merlkon")) {
       const keyword = encodeURIComponent(extra.search);
