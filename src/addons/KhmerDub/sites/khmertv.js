@@ -16,7 +16,7 @@ const CHANNELS = [
   {
     title: "KhmerTV",
     link: "https://livefta.malimarcdn.com/ftaedge00/khmertv2020.stream/chunklist.m3u8",
-    thumbnail: "https://www.phumi7.net/uploads/tv/apsara.jpeg",
+    thumbnail: "https://www.phumi7.net/uploads/tv/khmertv.png",
     resolve: true
   },
   {
@@ -26,7 +26,7 @@ const CHANNELS = [
     resolve: true
   },
   {
-    title: "Sea TV HD",
+    title: "SeaTV HD",
     link: "https://seatv.netlinkbroadcaster.com/hls/test.m3u8",
     thumbnail: "https://ia601501.us.archive.org/19/items/dog_gear_live_Logo/seatv-channel.png",
     resolve: true
