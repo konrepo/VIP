@@ -26,7 +26,7 @@ module.exports = {
   catalogs: sites
     .filter(site => site.enabled !== false)
     .map(site => {
-      if (site.id === "vip" || site.id === "idrama") {
+      if (site.id === "vip" || site.id === "idrama" || site.id === "sunday") {
         return {
           type: site.type,
           id: site.id,
@@ -35,6 +35,45 @@ module.exports = {
             { name: "search", isRequired: false },
             { name: "skip", isRequired: false },
             { name: "genre", isRequired: false, options: ["Thai", "China", "Korean"] }
+          ]
+        };
+      }
+
+      if (site.id === "phumi2") {
+        return {
+          type: site.type,
+          id: site.id,
+          name: site.name,
+          extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: ["Khmer", "China", "Korean"] }
+          ]
+        };
+      }
+
+      if (site.id === "khmerave") {
+        return {
+          type: site.type,
+          id: site.id,
+          name: site.name,
+          extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: ["Modern", "China", "Korean"] }
+          ]
+        };
+      }
+
+      if (site.id === "merlkon") {
+        return {
+          type: site.type,
+          id: site.id,
+          name: site.name,
+          extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: ["Khmer", "Thai", "Indian"] }
           ]
         };
       }
