@@ -32,7 +32,13 @@ async function getStreamDetail(postId, seriesUrl = "") {
       )
     );
 
-    detail = results.find(Boolean);
+    const validResults = results.filter(
+      (item) => item && Array.isArray(item.urls) && item.urls.length
+    );
+
+    if (validResults.length) {
+      detail = validResults.sort((a, b) => b.urls.length - a.urls.length)[0];
+    }
   }
 
   if (!detail) {
