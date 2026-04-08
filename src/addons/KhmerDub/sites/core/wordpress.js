@@ -37,7 +37,32 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
 
   thumbnail = normalizePoster(thumbnail);
 
-  // 1. direct page scan
+  // 1. player data-post-id blogger fallback
+  const playerPostId = $("#player").attr("data-post-id") || "";
+
+  if (playerPostId) {
+    const results = await Promise.all(
+      Object.values(BLOG_IDS).map((blogId) =>
+        fetchFromBlog(blogId, playerPostId)
+      )
+    );
+
+    const validResults = results.filter(
+      (item) => item && Array.isArray(item.urls) && item.urls.length
+    );
+
+    if (validResults.length) {
+      const best = validResults.sort((a, b) => b.urls.length - a.urls.length)[0];
+
+      return {
+        title: best.title || pageTitle,
+        thumbnail: best.thumbnail || thumbnail,
+        urls: [...new Set(best.urls)]
+      };
+    }
+  }
+
+  // 2. direct page scan
   let urls = extractVideoLinks(pageHtml);
   if (urls.length) {
     return {
@@ -47,7 +72,7 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
     };
   }
 
-  // 2. inline scripts scan
+  // 3. inline scripts scan
   const scripts = $("script")
     .map((_, el) => $(el).html() || "")
     .get()
@@ -62,7 +87,7 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
     };
   }
 
-  // 3. wp-json post content scan
+  // 4. wp-json post content scan
   try {
     const wpApiUrl = `https://phumikhmer.vip/wp-json/wp/v2/posts/${postId}`;
     const { data: wpPost } = await axiosClient.get(wpApiUrl, {
@@ -84,7 +109,7 @@ async function fetchVipWordpressDetail(seriesUrl, postId) {
     }
   } catch {}
 
-  // 4. search blogger by slug/title
+  // 5. search blogger by slug/title
   const searched = await findVipBloggerDetailBySearch(seriesUrl, postId);
   if (searched) {
     if (!searched.thumbnail && thumbnail) {
