@@ -45,14 +45,16 @@ async function fetchFromBlog(blogId, postId) {
 
     thumbnail = normalizePoster(thumbnail);
 
-    let urls = parseVipBloggerContent(content);
-
     const hasOkEmbed = /\{embed\s*=\s*ok\}/i.test(content);
     const okIds = extractOkIds(content);
+
+    let urls = [];
 
     if (hasOkEmbed && okIds.length) {
       urls.push(...okIds.map((id) => `https://ok.ru/videoembed/${id}`));
     }
+
+    urls.push(...parseVipBloggerContent(content));
 
     urls = [...new Set(urls)];
 
