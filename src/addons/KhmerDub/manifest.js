@@ -26,7 +26,7 @@ module.exports = {
   catalogs: sites
     .filter(site => site.enabled !== false)
     .map(site => {
-      if (site.id === "vip") {
+      if (site.id === "vip" || site.id === "idrama") {
         return {
           type: site.type,
           id: site.id,
