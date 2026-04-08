@@ -47,14 +47,14 @@ async function fetchFromBlog(blogId, postId) {
 
     let urls = parseVipBloggerContent(content);
 
-    if (!urls.length) {
-      const hasOkEmbed = /\{embed\s*=\s*ok\}/i.test(content);
-      const okIds = extractOkIds(content);
+    const hasOkEmbed = /\{embed\s*=\s*ok\}/i.test(content);
+    const okIds = extractOkIds(content);
 
-      if (hasOkEmbed && okIds.length) {
-        urls = okIds.map((id) => `https://ok.ru/videoembed/${id}`);
-      }
+    if (hasOkEmbed && okIds.length) {
+      urls.push(...okIds.map((id) => `https://ok.ru/videoembed/${id}`));
     }
+
+    urls = [...new Set(urls)];
 
     if (!urls.length) return null;
 
