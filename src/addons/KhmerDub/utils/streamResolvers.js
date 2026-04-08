@@ -103,8 +103,10 @@ async function resolveOkEmbed(embedUrl) {
           .replace(/&amp;/g, "&");
 
         const metaMatch =
-          metaText.match(/"ondemandHls":"(https:[^"]+?\.m3u8[^"]*)"/i) ||
-          metaText.match(/"hlsMasterPlaylistUrl":"(https:[^"]+?\.m3u8[^"]*)"/i) ||
+          metaText.match(/"ondemandHls"\s*:\s*"([^"]+)"/i) ||
+          metaText.match(/"hlsMasterPlaylistUrl"\s*:\s*"([^"]+)"/i) ||
+          metaText.match(/"hlsManifestUrl"\s*:\s*"([^"]+)"/i) ||
+          metaText.match(/"videoSrc"\s*:\s*"([^"]+\.m3u8[^"]*)"/i) ||
           metaText.match(/"(https:\/\/[^"]+\.m3u8[^"]*)"/i);
 
         if (metaMatch?.[1]) {
@@ -112,9 +114,13 @@ async function resolveOkEmbed(embedUrl) {
             .replace(/\\u0026/g, "&")
             .replace(/\\\//g, "/")
             .replace(/&amp;/g, "&");
+			
+          console.log("[resolveOkEmbed] metadata final", cleanUrl);
         }
       } catch {}
     }
+	
+	console.log("[resolveOkEmbed] final", cleanUrl);
 
     return cleanUrl;
   } catch {

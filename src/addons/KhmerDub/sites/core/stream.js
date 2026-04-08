@@ -122,6 +122,12 @@ async function getStream(prefix, seriesUrl, episode) {
     if (!resolved) return null;
     url = resolved;
   }
+  
+  console.log("[VIP final stream url]", {
+    episode,
+    url
+  });
+  
 
   if (url.includes("ok.ru/videoembed/")) {
     const resolved = await resolveOkEmbed(url);
