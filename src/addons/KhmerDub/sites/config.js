@@ -14,6 +14,11 @@ module.exports = {
     titleSelector: "h2 a, h3 a",
     posterSelector: "a.img-holder",
     posterAttrs: ["data-src", "data-bsrjs"]
+	genreUrls: {
+      Thai: "https://phumikhmer.vip/category/thai-drama/",
+      China: "https://phumikhmer.vip/category/chinese-drama/",
+      Korean: "https://phumikhmer.vip/category/korean-drama/"
+	}
   },
 
   sunday: {
