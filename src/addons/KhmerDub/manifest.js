@@ -25,12 +25,30 @@ module.exports = {
 
   catalogs: sites
     .filter(site => site.enabled !== false)
-    .map(site => ({
-      type: site.type,
-      id: site.id,
-      name: site.name,
-      extraSupported: EXTRA
-  })),
+    .map(site => {
+      if (site.id === "vip") {
+        return {
+          type: site.type,
+          id: site.id,
+          name: site.name,
+          extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: ["Thai", "China", "Korean"] }
+          ]
+        };
+      }
+
+      return {
+        type: site.type,
+        id: site.id,
+        name: site.name,
+        extra: [
+          { name: "search", isRequired: false },
+          { name: "skip", isRequired: false }
+        ]
+      };
+    }),
 
   behaviorHints: {
     configurable: false
