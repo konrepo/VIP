@@ -19,7 +19,7 @@ module.exports = (builder, deps) => {
 
       const { site, engine: siteEngine } = ctx;
 
-      if (id === "vip" && extra?.genre) {
+      if ((id === "vip" || id === "idrama") && extra?.genre) {
         const baseGenreUrl = site.genreUrls?.[extra.genre];
         if (!baseGenreUrl) return { metas: [] };
 
