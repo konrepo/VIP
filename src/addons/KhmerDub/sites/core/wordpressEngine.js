@@ -2,6 +2,9 @@ const cheerio = require("cheerio");
 const axiosClient = require("../../utils/fetch");
 const { withRequestCache } = require("../../utils/requestCache");
 
+const bloggerEngine = require("./bloggerEngine");
+const { BLOG_IDS } = require("../../utils/cache");
+
 const {
   normalizePoster,
   extractVideoLinks
@@ -12,6 +15,9 @@ async function fetchWordpressDetail(seriesUrl, postId) {
 
   return withRequestCache(cacheKey, async () => {
     try {
+      /* =========================
+         FETCH WORDPRESS PAGE
+      ========================= */
       const { data } = await axiosClient.get(seriesUrl, {
         headers: { Referer: seriesUrl }
       });
@@ -30,13 +36,17 @@ async function fetchWordpressDetail(seriesUrl, postId) {
 
       thumbnail = normalizePoster(thumbnail);
 
-      // 1) Direct HTML scan
+      /* =========================
+         DIRECT PAGE SCAN
+      ========================= */
       let urls = extractVideoLinks(data);
       if (urls.length) {
         return { title, thumbnail, urls };
       }
 
-      // 2) Inline scripts scan
+      /* =========================
+         INLINE SCRIPT SCAN
+      ========================= */
       const scripts = $("script")
         .map((_, el) => $(el).html() || "")
         .get()
@@ -47,7 +57,9 @@ async function fetchWordpressDetail(seriesUrl, postId) {
         return { title, thumbnail, urls };
       }
 
-      // 3) WP REST API fallback
+      /* =========================
+         WP REST API FALLBACK
+      ========================= */
       try {
         const apiUrl = `https://phumikhmer.vip/wp-json/wp/v2/posts/${postId}`;
         const { data: wpData } = await axiosClient.get(apiUrl, {
@@ -55,17 +67,37 @@ async function fetchWordpressDetail(seriesUrl, postId) {
         });
 
         const rendered = wpData?.content?.rendered || "";
-        const apiUrls = extractVideoLinks(rendered);
+        const restUrls = extractVideoLinks(rendered);
 
-        if (apiUrls.length) {
+        if (restUrls.length) {
           return {
             title: wpData?.title?.rendered || title,
             thumbnail,
-            urls: apiUrls
+            urls: restUrls
           };
         }
       } catch {
-        // ignore REST failures
+        // Ignore REST failures
+      }
+
+      /* =========================
+         BLOGGER PLAYER FALLBACK 
+         <div id="player" data-post-id="XXXXXXXXXXXXX"></div>
+      ========================= */
+      const bloggerPostId =
+        $("#player").attr("data-post-id") ||
+        $("div#player[data-post-id]").attr("data-post-id");
+
+      if (bloggerPostId) {
+        for (const blogId of Object.values(BLOG_IDS)) {
+          const detail = await bloggerEngine.fetchFromBlog(
+            blogId,
+            bloggerPostId
+          );
+          if (detail) {
+            return detail;
+          }
+        }
       }
 
       return null;
