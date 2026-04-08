@@ -19,6 +19,25 @@ module.exports = (builder, deps) => {
 
       const { site, engine: siteEngine } = ctx;
 
+      if (id === "vip" && extra?.genre) {
+        const baseGenreUrl = site.genreUrls?.[extra.genre];
+        if (!baseGenreUrl) return { metas: [] };
+
+        const pageSize = site.pageSize || 30;
+        const skip = Number(extra?.skip || 0);
+        const page = Math.floor(skip / pageSize) + 1;
+
+        const genreBase = String(baseGenreUrl).replace(/\/$/, "");
+        const url = page === 1
+          ? `${genreBase}/`
+          : `${genreBase}/page/${page}/`;
+
+        const items = await siteEngine.getCatalogItems(id, site, url);
+
+        const type = SITE_TYPES[id] || SITE_TYPES.default;
+        return { metas: mapMetas(items, type) };
+      }
+
       if (id === "khmertv") {
         const skip = Number(extra?.skip || 0);
         if (skip > 0) return { metas: [] };
