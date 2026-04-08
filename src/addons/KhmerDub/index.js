@@ -220,7 +220,7 @@ builder.defineStreamHandler(async ({ id }) => {
 
     const encodedUrl = isMovie
       ? parts.slice(1).join(":")
-      : parts.slice(1, -1).join(":");
+      : parts.slice(1, -2).join(":");
 
     if (!prefix || !encodedUrl || (!isMovie && episode <= 0)) {
       return { streams: [] };
