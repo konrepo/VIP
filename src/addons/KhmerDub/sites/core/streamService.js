@@ -39,8 +39,8 @@ async function getStream(prefix, seriesUrl, episode) {
     const groupName = prefix || "khmerdub";
 
     /* ==================================================
-       ✅ EXTERNAL EPISODE PAGE (VIP ONLY, e.g. nizu.top)
-       Triggered ONLY when the ID encodes an episode URL
+       EXTERNAL EPISODE PAGE (VIP only, e.g. nizu.top)
+       Triggered only when the ID encodes an episode URL
     =================================================== */
     if (
       prefix === "vip" &&
