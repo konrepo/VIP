@@ -24,6 +24,19 @@ const PROVIDERS = {
   phumi2: "PhumiClub"
 };
 
+// External episode page (e.g. nizu.top)
+if (/^https?:\/\/[^/]+\/.*-\d+\/?$/.test(seriesUrl)) {
+  // Treat as direct episode page
+  const detail = await getStreamDetail(null, "wordpress", seriesUrl);
+  if (!detail?.urls?.length) return { streams: [] };
+
+  return {
+    streams: detail.urls.map(url =>
+      buildStream(url, episode, null, "PhumiVIP", "vip", seriesUrl)
+    )
+  };
+}
+
 async function getStream(prefix, seriesUrl, episode) {
 
   console.log("[streamService]", {

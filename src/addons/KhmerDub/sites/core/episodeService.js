@@ -79,27 +79,37 @@ async function extractExternalEpisodes(prefix, seriesUrl) {
 
     const $ = cheerio.load(data);
 
-    const links = $("a[href]")
-      .map((_, el) => $(el).attr("href"))
+    // Detect NIZU series link
+    const nizuSeries =
+      $("a[href*='nizu.top/series/']").first().attr("href");
+
+    if (!nizuSeries) return [];
+
+    // Fetch NIZU series page
+    const { data: seriesHtml } = await axiosClient.get(nizuSeries, {
+      headers: { Referer: seriesUrl }
+    });
+
+    const $$ = cheerio.load(seriesHtml);
+
+    // Extract all episode links
+    const episodeLinks = $$("a[href*='virak-nearei-hang-pleung-']")
+      .map((_, el) => $$(el).attr("href"))
       .get()
-      .filter(h =>
-        h &&
-        /^https?:\/\/[^/]+\/[^/]+-\d+$/i.test(h)
-      );
+      .filter(Boolean);
 
-    if (!links.length) return [];
+    const unique = [...new Set(episodeLinks)];
 
-    const unique = [...new Set(links)];
-
-    return unique.map((_, idx) => ({
-      id: `${prefix}:${encodeURIComponent(seriesUrl)}:1:${idx + 1}`,
+    return unique.map((url, idx) => ({
+      id: `${prefix}:${encodeURIComponent(url)}:1:${idx + 1}`,
       title: `Episode ${idx + 1}`,
       season: 1,
       episode: idx + 1,
       thumbnail: "",
       released: new Date().toISOString()
     }));
-  } catch {
+  } catch (err) {
+    console.error("External episode parse error:", err.message);
     return [];
   }
 }
