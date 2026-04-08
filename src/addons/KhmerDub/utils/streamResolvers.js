@@ -143,10 +143,12 @@ function buildStream(
     behaviorHints: isOk
       ? {
           group,
+          notWebReady: true,
           proxyHeaders: {
             request: {
               Referer: "https://ok.ru/",
-              Origin: "https://ok.ru"
+              Origin: "https://ok.ru",
+              "User-Agent": "Mozilla/5.0"
             }
           }
         }
