@@ -25,6 +25,13 @@ const PROVIDERS = {
 };
 
 async function getStream(prefix, seriesUrl, episode) {
+
+  console.log("[streamService]", {
+    prefix,
+    seriesUrl,
+    episode
+  });
+
   const providerName = PROVIDERS[prefix] || "KhmerDub";
   const groupName = prefix || "khmerdub";
 
