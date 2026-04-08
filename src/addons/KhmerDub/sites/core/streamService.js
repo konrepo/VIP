@@ -11,6 +11,8 @@ const { sortStreams } = require("../../utils/streamSort");
 
 const { resolvePost } = require("./postResolver");
 const { getStreamDetail } = require("./episodeService");
+const wordpressEngine = require("./wordpressEngine");
+const { POST_INFO } = require("../../utils/cache");
 
 /* =========================
    PROVIDER NAMES
@@ -38,35 +40,8 @@ async function getStream(prefix, seriesUrl, episode) {
     const providerName = PROVIDERS[prefix] || "KhmerDub";
     const groupName = prefix || "khmerdub";
 
-    /* ==================================================
-       EXTERNAL EPISODE PAGE (VIP only, e.g. nizu.top)
-       Triggered only when the ID encodes an episode URL
-    =================================================== */
-    if (
-      prefix === "vip" &&
-      /^https?:\/\/[^/]+\/.*-\d+\/?$/.test(seriesUrl)
-    ) {
-      const detail = await getStreamDetail(null, "wordpress", seriesUrl);
-      if (!detail?.urls?.length) {
-        return { streams: [] };
-      }
-
-      const streams = detail.urls.map(url =>
-        buildStream(
-          url,
-          episode,
-          null,
-          providerName,
-          groupName,
-          seriesUrl
-        )
-      );
-
-      return { streams: sortStreams(streams) };
-    }
-
     /* =========================
-       RESOLVE POST (TTL‑AWARE)
+       RESOLVE POST
     ========================= */
     const { postId, info } = await resolvePost(seriesUrl);
 
@@ -74,44 +49,73 @@ async function getStream(prefix, seriesUrl, episode) {
        SUNDAY DIRECT FALLBACK
     ========================= */
     if (!postId && prefix === "sunday") {
-      try {
-        const { data } = await axiosClient.get(seriesUrl, {
-          headers: { Referer: seriesUrl }
-        });
+      const { data } = await axiosClient.get(seriesUrl, {
+        headers: { Referer: seriesUrl }
+      });
 
-        const links = extractVideoLinks(data);
-        const url = links[episode - 1];
-        if (!url) return { streams: [] };
+      const links = extractVideoLinks(data);
+      const url = links[episode - 1];
+      if (!url) return { streams: [] };
 
-        const stream = buildStream(
-          url,
-          episode,
-          null,
-          providerName,
-          groupName,
-          seriesUrl
-        );
-
-        return { streams: sortStreams([stream]) };
-      } catch {
-        return { streams: [] };
-      }
+      return {
+        streams: sortStreams([
+          buildStream(url, episode, null, providerName, groupName, seriesUrl)
+        ])
+      };
     }
 
     if (!postId || !info) return { streams: [] };
 
     /* =========================
-       FETCH STREAM DETAIL
+       FETCH STREAM DETAIL 
     ========================= */
     const detail = await getStreamDetail(postId, info.sourceType, seriesUrl);
+
+    /* ==================================================
+       VIP MULTI‑EP EXTERNAL FALLBACK
+    =================================================== */
+    if (
+      prefix === "vip" &&
+      detail?.urls?.length === 1 &&
+      episode > 1
+    ) {
+      const cached = POST_INFO.get(postId);
+      const slug = cached?.slug;
+      if (!slug) return { streams: [] };
+
+      const externalEpisodeUrl =
+        `https://nizu.top/${slug}-${episode}/`;
+
+      // bypass getStreamDetail
+      const extDetail =
+        await wordpressEngine.fetchWordpressDetail(externalEpisodeUrl, null);
+
+      if (!extDetail?.urls?.length) return { streams: [] };
+
+      return {
+        streams: sortStreams(
+          extDetail.urls.map(url =>
+            buildStream(
+              url,
+              episode,
+              null,
+              providerName,
+              groupName,
+              externalEpisodeUrl
+            )
+          )
+        )
+      };
+    }
+
+    /* =========================
+       NORMAL PER‑EP STREAM
+    ========================= */
     if (!detail?.urls?.length) return { streams: [] };
 
     let url = detail.urls[episode - 1];
     if (!url) return { streams: [] };
 
-    /* =========================
-       RESOLVE INDIRECT STREAMS
-    ========================= */
     if (url.includes("player.php")) {
       url = await resolvePlayerUrl(url);
       if (!url) return { streams: [] };
@@ -122,20 +126,10 @@ async function getStream(prefix, seriesUrl, episode) {
       if (!url) return { streams: [] };
     }
 
-    /* =========================
-       BUILD & SORT STREAMS
-    ========================= */
-    const stream = buildStream(
-      url,
-      episode,
-      null,
-      providerName,
-      groupName,
-      seriesUrl
-    );
-
     return {
-      streams: sortStreams([stream])
+      streams: sortStreams([
+        buildStream(url, episode, null, providerName, groupName, seriesUrl)
+      ])
     };
 
   } catch (err) {
