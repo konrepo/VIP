@@ -1,16 +1,17 @@
+const TYPES = ["series", "movie", "channel"];
 const EXTRA = ["search", "skip"];
 
 const sites = [
-  { id: "vip", name: "PhumiVip-test", type: "series", enabled: true },
-  { id: "sunday", name: "SundayDrama-test", type: "series", enabled: true },
-  { id: "phumi2", name: "PhumiClub-test", type: "series", enabled: true },
-  { id: "khmerave", name: "KhmerAve-test", type: "series", enabled: true },
-  { id: "merlkon", name: "Merlkon-test", type: "series", enabled: true },
-  { id: "idrama", name: "iDramaHD-test", type: "series", enabled: true },
-  { id: "cat3movie", name: "Cat3Movie", type: "movie", enabled: false } // disabled
+  { id: "khmertv", name: "KhmerTV", type: "channel", enabled: true }, 
+  { id: "vip", name: "PhumiVip", type: "series", enabled: true },
+  { id: "sunday", name: "SundayDrama", type: "series", enabled: true },
+  { id: "phumi2", name: "PhumiClub", type: "series", enabled: true },
+  { id: "khmerave", name: "KhmerAve", type: "series", enabled: true },
+  { id: "merlkon", name: "Merlkon", type: "series", enabled: true },
+  { id: "idrama", name: "iDramaHD", type: "series", enabled: true }, 
+  { id: "cat3movie", name: "Cat3Movie", type: "movie", enabled: false },
+  { id: "xvideos", name: "xvideos", type: "movie", enabled: false }  
 ];
-
-const enabled = sites.filter(site => site.enabled !== false);
 
 module.exports = {
   id: "community.khmer.nuvio",
@@ -20,18 +21,76 @@ module.exports = {
   logo: "https://raw.githubusercontent.com/konrepo/TEST/refs/heads/main/test.png",
 
   resources: ["catalog", "meta", "stream"],
-  types: ["series", "movie"],
+  types: TYPES,
 
-  idPrefixes: enabled.map(s => s.id),
+  catalogs: sites
+    .filter(site => site.enabled !== false)
+    .map(site => {
+      if (site.id === "vip" || site.id === "idrama" || site.id === "sunday") {
+        return {
+          type: site.type,
+          id: site.id,
+          name: site.name,
+          extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: ["Thai", "China", "Korean"] }
+          ]
+        };
+      }
 
-  catalogs: enabled.map(site => ({
-    type: site.type,
-    id: site.id,
-    name: site.name,
-    extraSupported: EXTRA
-  })),
+      if (site.id === "phumi2") {
+        return {
+          type: site.type,
+          id: site.id,
+          name: site.name,
+          extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: ["Khmer", "China", "Korean"] }
+          ]
+        };
+      }
+
+      if (site.id === "khmerave") {
+        return {
+          type: site.type,
+          id: site.id,
+          name: site.name,
+          extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: ["Modern", "China", "Korean"] }
+          ]
+        };
+      }
+
+      if (site.id === "merlkon") {
+        return {
+          type: site.type,
+          id: site.id,
+          name: site.name,
+          extra: [
+            { name: "search", isRequired: false },
+            { name: "skip", isRequired: false },
+            { name: "genre", isRequired: false, options: ["Khmer", "Thai", "Indian"] }
+          ]
+        };
+      }
+
+      return {
+        type: site.type,
+        id: site.id,
+        name: site.name,
+        extra: [
+          { name: "search", isRequired: false },
+          { name: "skip", isRequired: false }
+        ]
+      };
+    }),
 
   behaviorHints: {
     configurable: false
   }
-};
+
+}; 
