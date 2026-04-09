@@ -1,4 +1,4 @@
-const { PAGE_TRACKER, PAGE_URL_CACHE } = require("./utils/cache");
+const { PAGE_TRACKER, PAGE_URL_CACHE } = require("../utils/cache");
 
 module.exports = (builder, deps) => {
   const {
@@ -25,7 +25,7 @@ module.exports = (builder, deps) => {
         if (skip > 0) return { metas: [] };
 
         const items = await siteEngine.getCatalogItems(id, site, "");
-        return { metas: mapMetas(items, "movie") };
+        return { metas: mapMetas(items, "channel") };
       }
 
       // KhmerAve / Merlkon search
