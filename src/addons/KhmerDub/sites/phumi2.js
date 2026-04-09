@@ -249,7 +249,7 @@ async function getEpisodes(prefix, seriesUrl) {
 
     return detail.videos.map((v, index) => ({
       id: `${prefix}:${encodeURIComponent(seriesUrl)}:1:${index + 1}`,
-      title: normalizeEpisodeTitle(v.title, index),
+      title: detail.title || v.title || `Episode ${index + 1}`,
       season: 1,
       episode: index + 1,
       thumbnail: detail.thumbnail || "",
