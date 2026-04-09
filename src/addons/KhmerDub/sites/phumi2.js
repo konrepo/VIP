@@ -95,7 +95,8 @@ function getNextPageUrl(base, html) {
 
 function parseVideosArray(html) {
   try {
-    const match =
+    let match =
+      html.match(/options\.player_list\s*=\s*(\[[\s\S]*?\])\s*;/i) ||
       html.match(/const\s+videos\s*=\s*(\[[\s\S]*?\]);\s*<\/script>/i) ||
       html.match(/const\s+videos\s*=\s*(\[[\s\S]*?\]);/i);
 
@@ -118,7 +119,8 @@ function parseVideosArray(html) {
         file: String(item.file || "").trim()
       }))
       .filter((item) => item.file);
-  } catch {
+  } catch (err) {
+    console.log("[phumi2] parseVideosArray failed:", err.message);
     return [];
   }
 }
