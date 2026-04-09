@@ -51,13 +51,19 @@ function normalizeEpisodeTitle(title, index) {
 
   let t = title.trim();
 
+  // 01.Title OR 01 Title
+  let match = t.match(/^(\d+)\s*[\.\-]?\s*/);
+  if (match) {
+    const ep = parseInt(match[1], 10);
+    return t.toUpperCase().includes("E")
+      ? `Episode ${ep} End`
+      : `Episode ${ep}`;
+  }
+
   // EP 1 → Episode 1
   t = t.replace(/^EP\s*/i, "Episode ");
 
-  // EP30 → Episode 30
-  t = t.replace(/^Episode\s*(\d+)E$/i, "Episode $1 End");
-
-  // EP 30E → Episode 30 End
+  // Episode 30E → Episode 30 End
   t = t.replace(/^Episode\s*(\d+)\s*E$/i, "Episode $1 End");
 
   return t;
@@ -243,7 +249,7 @@ async function getEpisodes(prefix, seriesUrl) {
 
     return detail.videos.map((v, index) => ({
       id: `${prefix}:${encodeURIComponent(seriesUrl)}:1:${index + 1}`,
-      title: title: v.title || `Episode ${index + 1}`,
+      title: normalizeEpisodeTitle(v.title, index),
       season: 1,
       episode: index + 1,
       thumbnail: detail.thumbnail || "",
