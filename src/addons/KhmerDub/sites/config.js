@@ -90,7 +90,7 @@ module.exports = {
     baseUrl: "https://www.xvideos.com",
     pageSize: 27,
     categoryMap: {
-	  Official: "/adulttimeofficial#_tabVideos",
+	  Eighteen: "/tags/18-year-old",
       Amateur: "/c/Amateur-65",
       Anal: "/c/Anal-12",
       Arab: "/c/Arab-159",
