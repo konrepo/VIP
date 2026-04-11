@@ -8,7 +8,8 @@ const {
 const {
   resolvePlayerUrl,
   resolveOkEmbed,
-  buildStream
+  buildStream,
+  buildYouTubeStreams
 } = require("../utils/streamResolvers");
 
 /* =========================
@@ -266,6 +267,17 @@ async function getStream(prefix, seriesUrl, episode) {
     if (!v?.file) return null;
 
     let url = normalizeVideoUrl(v.file, seriesUrl);
+
+    if (/youtu\.be|youtube\.com/i.test(url)) {
+      const ytStreams = buildYouTubeStreams(
+        url,
+        episode,
+        v.title,
+        "PhumiClub",
+        "phumi2"
+      );
+      return ytStreams || null;
+    }
 
     if (url.includes("player.php")) {
       const resolved = await resolvePlayerUrl(url);
