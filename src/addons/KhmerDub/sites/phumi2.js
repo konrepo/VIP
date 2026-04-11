@@ -269,14 +269,20 @@ async function getStream(prefix, seriesUrl, episode) {
     let url = normalizeVideoUrl(v.file, seriesUrl);
 
     if (/youtu\.be|youtube\.com/i.test(url)) {
-      const ytStreams = buildYouTubeStreams(
-        url,
-        episode,
-        v.title,
-        "PhumiClub",
-        "phumi2"
-      );
-      return ytStreams || null;
+      const ytId =
+        url.match(/youtu\.be\/([^?&/]+)/)?.[1] ||
+        url.match(/[?&]v=([^&]+)/)?.[1] ||
+        url.match(/\/embed\/([^?&/]+)/)?.[1] ||
+        url.match(/\/shorts\/([^?&/]+)/)?.[1];
+
+      if (!ytId) return null;
+
+      return {
+        ytId,
+        name: "PhumiClub",
+        title: v.title || `Episode ${episode}`,
+        behaviorHints: { group: "phumi2" }
+      };
     }
 
     if (url.includes("player.php")) {
